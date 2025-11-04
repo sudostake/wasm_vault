@@ -38,8 +38,7 @@ mod tests {
             .save(deps.as_mut().storage, &owner)
             .expect("owner saved");
 
-        let response = query(deps.as_ref(), mock_env(), QueryMsg::Info)
-            .expect("query succeeds");
+        let response = query(deps.as_ref(), mock_env(), QueryMsg::Info).expect("query succeeds");
 
         let info: InfoResponse = cosmwasm_std::from_json(response).expect("valid json");
 
