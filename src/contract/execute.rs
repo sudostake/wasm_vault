@@ -26,13 +26,8 @@ mod tests {
         let caller = deps.api.addr_make("caller");
         let info = message_info(&caller, &[]);
 
-        let response = execute(
-            deps.as_mut(),
-            mock_env(),
-            info,
-            ExecuteMsg::Noop {},
-        )
-        .expect("execute succeeds");
+        let response = execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Noop {})
+            .expect("execute succeeds");
 
         assert!(response.messages.is_empty());
         assert!(response.attributes.is_empty());
