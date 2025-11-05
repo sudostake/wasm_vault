@@ -52,9 +52,9 @@ mod tests {
 
         let err = query(deps.as_ref(), mock_env(), QueryMsg::Info).unwrap_err();
 
-        match err {
-            cosmwasm_std::StdError::NotFound { .. } => {}
-            _ => panic!("unexpected error type"),
-        }
+        assert!(
+            err.to_string().contains("not found"),
+            "unexpected error type: {err}"
+        );
     }
 }

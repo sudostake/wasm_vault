@@ -25,6 +25,7 @@ overflow-checks = true
 library = []
 
 [package.metadata.scripts]
+integration-tests = """bash ./scripts/run-integration-tests.sh"""
 optimize = """docker run --rm -v "$(pwd)":/code \
   --mount type=volume,source="$(basename "$(pwd)")_cache",target=/target \
   --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
@@ -32,20 +33,15 @@ optimize = """docker run --rm -v "$(pwd)":/code \
 """
 
 [dependencies]
-cosmwasm-schema = "2.2.0"
-cosmwasm-std = { version = "2.2.0", features = [
-  "cosmwasm_1_4",
-  # Enable this if you only deploy to chains that have CosmWasm 2.0 or higher
-  # "cosmwasm_2_0",
-  # Or this if you only deploy to chains that have CosmWasm 2.1 or higher
-  # "cosmwasm_2_1",
+cosmwasm-schema = "3.0.2"
+cosmwasm-std = { version = "3.0.2", features = [
+  # Enable this if you only deploy to chains that have CosmWasm 3.0 or higher
+  "cosmwasm_3_0",
 ] }
-cw-storage-plus = "2.0.0"
-cw2 = "2.0.0"
-schemars = "0.8.16"
-serde = { version = "1.0.197", default-features = false, features = ["derive"] }
-thiserror = { version = "1.0.58" }
-ed25519-zebra = { version = "4.1.0", default-features = false, features = ["alloc"] }
+cw-storage-plus = "3.0.1"
+cw2 = "3.0.0"
+serde = { version = "1.0.228", default-features = false, features = ["derive"] }
+thiserror = { version = "2.0.17" }
 
 [dev-dependencies]
-cw-multi-test = { version = "2.0.0", features = ["staking"] }
+cw-multi-test = { version = "3.0.1", features = ["staking"] }
