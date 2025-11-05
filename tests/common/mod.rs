@@ -1,4 +1,4 @@
-use cosmwasm_std::{coins, Decimal, Validator};
+use cosmwasm_std::{coins, Decimal, Decimal256, Validator};
 use cw_multi_test::{AppBuilder, BasicApp, ContractWrapper, StakingInfo};
 
 use wasm_vault::contract::{execute, instantiate, query};
@@ -28,7 +28,7 @@ pub fn mock_app() -> BasicApp {
                 StakingInfo {
                     bonded_denom: DENOM.to_string(),
                     unbonding_time: 14 * 24 * 60 * 60,
-                    apr: Decimal::percent(12),
+                    apr: Decimal256::percent(12),
                 },
             )
             .unwrap();
