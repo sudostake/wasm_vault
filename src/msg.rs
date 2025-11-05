@@ -1,4 +1,4 @@
-use crate::types::InfoResponse;
+pub use crate::types::InfoResponse;
 use cosmwasm_schema::{cw_serde, QueryResponses};
 
 #[cw_serde]
