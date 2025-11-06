@@ -6,7 +6,7 @@ Rust smart contract for CosmWasm-based chains. The steps below get you ready to 
 
 - Rust toolchain via [rustup](https://rustup.rs/) (1.82 or newer; older toolchains fail because `indexmap` ≥2.12 requires rustc 1.82).
 - `wasm32-unknown-unknown` target for Rust.
-- [`cargo-run-script`](https://github.com/fornwall/cargo-run-script) (`cargo install cargo-run-script`) for helper aliases such as `cargo run-script optimize`.
+- [`cargo-run-script`](https://github.com/fornwall/cargo-run-script) (`cargo install cargo-run-script`) — required only for `cargo run-script optimize`.
 - [`cargo-nextest`](https://nexte.st/) (`cargo install cargo-nextest`) for running the test suite with the multi-threaded runner.
 - [`cargo-tarpaulin`](https://github.com/xd009642/tarpaulin) (`cargo install cargo-tarpaulin`) for coverage reports.
 - Docker (optional) if you want to run the optimizer script.
