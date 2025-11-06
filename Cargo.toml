@@ -25,7 +25,6 @@ overflow-checks = true
 library = []
 
 [package.metadata.scripts]
-integration-tests = """bash ./scripts/run-integration-tests.sh"""
 optimize = """docker run --rm -v "$(pwd)":/code \
   --mount type=volume,source="$(basename "$(pwd)")_cache",target=/target \
   --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
@@ -44,4 +43,4 @@ serde = { version = "1.0.228", default-features = false, features = ["derive"] }
 thiserror = { version = "2.0.17" }
 
 [dev-dependencies]
-cw-multi-test = { version = "3.0.1", features = ["staking"] }
+cw-multi-test = { version = "3.0.1", features = ["staking", "cosmwasm_3_0"] }

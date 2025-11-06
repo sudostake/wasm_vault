@@ -6,7 +6,9 @@ Rust smart contract for CosmWasm-based chains. The steps below get you ready to 
 
 - Rust toolchain via [rustup](https://rustup.rs/) (1.82 or newer; older toolchains fail because `indexmap` ≥2.12 requires rustc 1.82).
 - `wasm32-unknown-unknown` target for Rust.
-- [`cargo-run-script`](https://github.com/fornwall/cargo-run-script) (`cargo install cargo-run-script`) for helper aliases like `cargo integration-test` and `cargo run-script optimize`.
+- [`cargo-run-script`](https://github.com/fornwall/cargo-run-script) (`cargo install cargo-run-script`) — required only for `cargo run-script optimize`.
+- [`cargo-nextest`](https://nexte.st/) (`cargo install cargo-nextest`) for running the test suite with the multi-threaded runner.
+- [`cargo-tarpaulin`](https://github.com/xd009642/tarpaulin) (`cargo install cargo-tarpaulin`) for coverage reports.
 - Docker (optional) if you want to run the optimizer script.
 
 ## Install & Build Locally
@@ -28,18 +30,26 @@ Rust smart contract for CosmWasm-based chains. The steps below get you ready to 
 
 ## Run Tests
 
-1. Execute unit tests (runs in native mode):
-   ```sh
-   cargo unit-test
-   ```
-2. Run integration tests (files in `tests/` only):
-   ```sh
-   cargo integration-test
-   ```
-3. Run the full test matrix if you want everything in one go:
-   ```sh
-   cargo test
-   ```
+- Run all unit and integration tests with the default runner:
+  ```sh
+  cargo test
+  ```
+- Run the cw-multi-test integration suite only (entrypoint `tests/mod.rs`, which re-exports everything under `tests/multitest/`):
+  ```sh
+  cargo test --test mod
+  ```
+- Use Nextest for faster, isolated execution when iterating locally:
+  ```sh
+  cargo nextest run
+  ```
+- Run only documentation tests (mirrors the `cargo test --doc` CI step):
+  ```sh
+  cargo test --doc
+  ```
+- Generate coverage data (uses Tarpaulin):
+  ```sh
+  cargo tarpaulin
+  ```
 
 ## Useful Extras
 
