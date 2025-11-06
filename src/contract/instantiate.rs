@@ -1,11 +1,11 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{DepsMut, Env, MessageInfo, Response};
+use cosmwasm_std::{DepsMut, Env, MessageInfo, Response, Uint128};
 use cw2::set_contract_version;
 
 use crate::error::ContractError;
 use crate::msg::InstantiateMsg;
-use crate::state::OWNER;
+use crate::state::{OUTSTANDING_DEBT, OWNER};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:wasm_vault";
@@ -25,6 +25,7 @@ pub fn instantiate(
         None => info.sender.clone(),
     };
     OWNER.save(deps.storage, &owner)?;
+    OUTSTANDING_DEBT.save(deps.storage, &Uint128::zero())?;
 
     Ok(Response::new()
         .add_attribute("method", "instantiate")
@@ -58,6 +59,9 @@ mod tests {
 
         let saved_owner = OWNER.load(&deps.storage).unwrap();
         assert_eq!(saved_owner, owner);
+
+        let debt = OUTSTANDING_DEBT.load(&deps.storage).unwrap();
+        assert!(debt.is_zero());
     }
 
     #[test]
@@ -72,5 +76,8 @@ mod tests {
 
         let saved_owner = OWNER.load(&deps.storage).unwrap();
         assert_eq!(saved_owner, sender);
+
+        let debt = OUTSTANDING_DEBT.load(&deps.storage).unwrap();
+        assert!(debt.is_zero());
     }
 }

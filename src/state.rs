@@ -1,10 +1,8 @@
-use cosmwasm_std::Addr;
+use cosmwasm_std::{Addr, Uint128};
 use cw_storage_plus::Item;
 
-use crate::types::OutstandingDebt;
-
 pub const OWNER: Item<Addr> = Item::new("owner");
-pub const OUTSTANDING_DEBT: Item<OutstandingDebt> = Item::new("outstanding_debt");
+pub const OUTSTANDING_DEBT: Item<Uint128> = Item::new("outstanding_debt");
 
 #[cfg(test)]
 mod tests {
@@ -29,18 +27,16 @@ mod tests {
     #[test]
     fn outstanding_debt_item_handles_amount() {
         let mut deps = mock_dependencies();
-        let debt = OutstandingDebt {
-            amount: Uint128::new(50),
-        };
+        let amount = Uint128::new(50);
 
         OUTSTANDING_DEBT
-            .save(deps.as_mut().storage, &debt)
+            .save(deps.as_mut().storage, &amount)
             .expect("save succeeds");
 
         let loaded = OUTSTANDING_DEBT
-            .may_load(deps.as_ref().storage)
+            .load(deps.as_ref().storage)
             .expect("query succeeds");
 
-        assert_eq!(loaded, Some(debt));
+        assert_eq!(loaded, amount);
     }
 }

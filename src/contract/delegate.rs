@@ -29,12 +29,9 @@ pub fn execute(
     let denom = deps.querier.query_bonded_denom()?;
     let requested = Uint256::from(amount);
 
-    if let Some(debt) = OUTSTANDING_DEBT.may_load(deps.storage)? {
-        if !debt.amount.is_zero() {
-            return Err(ContractError::OutstandingDebt {
-                amount: debt.amount,
-            });
-        }
+    let debt = OUTSTANDING_DEBT.load(deps.storage)?;
+    if !debt.is_zero() {
+        return Err(ContractError::OutstandingDebt { amount: debt });
     }
 
     let balance = deps
@@ -78,17 +75,20 @@ pub fn execute(
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
-    use cosmwasm_std::{coins, Coin, Decimal, Uint128, Validator};
+    use cosmwasm_std::{coins, Addr, Coin, Decimal, Storage, Uint128, Validator};
 
-    use crate::types::OutstandingDebt;
+    fn setup_owner_and_zero_debt(storage: &mut dyn Storage, owner: &Addr) {
+        OWNER.save(storage, owner).expect("owner stored");
+        OUTSTANDING_DEBT
+            .save(storage, &Uint128::zero())
+            .expect("zero debt stored");
+    }
 
     #[test]
     fn fails_for_unauthorized_sender() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        OWNER
-            .save(deps.as_mut().storage, &owner)
-            .expect("owner stored");
+        setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
 
         let info = message_info(&deps.api.addr_make("intruder"), &[]);
         let amount = Uint128::new(10);
@@ -102,9 +102,7 @@ mod tests {
     fn fails_for_zero_amount() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        OWNER
-            .save(deps.as_mut().storage, &owner)
-            .expect("owner stored");
+        setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
 
         let info = message_info(&owner, &[]);
         let validator = deps.api.addr_make("validator").into_string();
@@ -117,9 +115,7 @@ mod tests {
     fn fails_when_funds_attached() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        OWNER
-            .save(deps.as_mut().storage, &owner)
-            .expect("owner stored");
+        setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
 
         let info = message_info(&owner, &coins(10, "ucosm"));
         let validator = deps.api.addr_make("validator").into_string();
@@ -133,9 +129,7 @@ mod tests {
     fn fails_for_insufficient_balance() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        OWNER
-            .save(deps.as_mut().storage, &owner)
-            .expect("owner stored");
+        setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
 
         let contract_addr = mock_env().contract.address;
         deps.querier
@@ -155,9 +149,7 @@ mod tests {
     fn fails_for_missing_validator() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        OWNER
-            .save(deps.as_mut().storage, &owner)
-            .expect("owner stored");
+        setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
 
         let env = mock_env();
         deps.querier.staking.update("ucosm", &[], &[]);
@@ -176,17 +168,10 @@ mod tests {
     fn fails_when_outstanding_debt_exists_for_denom() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        OWNER
-            .save(deps.as_mut().storage, &owner)
-            .expect("owner stored");
+        setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
 
         OUTSTANDING_DEBT
-            .save(
-                deps.as_mut().storage,
-                &OutstandingDebt {
-                    amount: Uint128::new(500),
-                },
-            )
+            .save(deps.as_mut().storage, &Uint128::new(500))
             .expect("debt stored");
 
         let info = message_info(&owner, &[]);
@@ -203,9 +188,7 @@ mod tests {
     fn creates_delegate_message() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        OWNER
-            .save(deps.as_mut().storage, &owner)
-            .expect("owner stored");
+        setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
 
         let env = mock_env();
         let validator = deps.api.addr_make("validator");
