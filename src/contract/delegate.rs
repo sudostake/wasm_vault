@@ -78,8 +78,7 @@ mod tests {
         let info = message_info(&deps.api.addr_make("intruder"), &[]);
         let amount = Coin::new(10u128, "ucosm");
         let validator = deps.api.addr_make("validator").into_string();
-        let err = execute(deps.as_mut(), mock_env(), info, validator, amount)
-            .unwrap_err();
+        let err = execute(deps.as_mut(), mock_env(), info, validator, amount).unwrap_err();
 
         assert!(matches!(err, ContractError::Unauthorized {}));
     }
@@ -145,14 +144,7 @@ mod tests {
         let amount = Coin::new(100u128, "ucosm");
 
         let validator = deps.api.addr_make("validator").into_string();
-        let err = execute(
-            deps.as_mut(),
-            mock_env(),
-            info,
-            validator,
-            amount,
-        )
-        .unwrap_err();
+        let err = execute(deps.as_mut(), mock_env(), info, validator, amount).unwrap_err();
 
         assert!(matches!(err, ContractError::InsufficientBalance { .. }));
     }
