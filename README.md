@@ -42,6 +42,10 @@ Rust smart contract for CosmWasm-based chains. The steps below get you ready to 
   ```sh
   cargo nextest run
   ```
+- Run only documentation tests (mirrors the `cargo test --doc` CI step):
+  ```sh
+  cargo test --doc
+  ```
 - Generate coverage data (uses Tarpaulin):
   ```sh
   cargo tarpaulin
