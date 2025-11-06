@@ -81,7 +81,9 @@ mod tests {
 
     fn setup_owner_and_zero_debt(storage: &mut dyn Storage, owner: &Addr) {
         OWNER.save(storage, owner).expect("owner stored");
-        OUTSTANDING_DEBT.save(storage, &0u128).expect("zero debt stored");
+        OUTSTANDING_DEBT
+            .save(storage, &0u128)
+            .expect("zero debt stored");
     }
 
     #[test]
