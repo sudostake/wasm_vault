@@ -34,7 +34,7 @@ Rust smart contract for CosmWasm-based chains. The steps below get you ready to 
   ```sh
   cargo test
   ```
-- Run the cw-multi-test integration suite only (tests live in `tests/multitest/` via `tests/mod.rs`):
+- Run the cw-multi-test integration suite only (entrypoint `tests/mod.rs`, which re-exports everything under `tests/multitest/`):
   ```sh
   cargo test --test mod
   ```
