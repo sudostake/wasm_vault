@@ -26,7 +26,7 @@ mod tests {
     use super::*;
     use crate::state::OWNER;
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
-    use cosmwasm_std::{coins, Coin};
+    use cosmwasm_std::{coins, Uint128};
 
     #[test]
     fn execute_returns_empty_response() {
@@ -49,6 +49,7 @@ mod tests {
             .save(deps.as_mut().storage, &owner)
             .expect("owner stored");
 
+        deps.querier.staking.update("ucosm", &[], &[]);
         deps.querier
             .bank
             .update_balance(mock_env().contract.address.as_str(), coins(100, "ucosm"));
@@ -62,7 +63,7 @@ mod tests {
             message_info(&owner, &[]),
             ExecuteMsg::Delegate {
                 validator,
-                amount: Coin::new(50u128, "ucosm"),
+                amount: Uint128::new(50),
             },
         )
         .unwrap_err();

@@ -1,13 +1,18 @@
-use cosmwasm_std::{attr, Coin, DepsMut, Env, MessageInfo, Response, StakingMsg};
+use cosmwasm_std::{
+    attr, Coin, DepsMut, Env, MessageInfo, Response, StakingMsg, Uint128, Uint256,
+};
 
-use crate::{state::OWNER, ContractError};
+use crate::{
+    state::{OUTSTANDING_DEBT, OWNER},
+    ContractError,
+};
 
 pub fn execute(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
     validator: String,
-    amount: Coin,
+    amount: Uint128,
 ) -> Result<Response, ContractError> {
     let owner = OWNER.load(deps.storage)?;
     if info.sender != owner {
@@ -18,13 +23,19 @@ pub fn execute(
         return Err(ContractError::FundsNotAccepted {});
     }
 
-    if amount.amount.is_zero() {
+    if amount.is_zero() {
         return Err(ContractError::InvalidDelegationAmount {});
     }
 
     let validator_addr = deps.api.addr_validate(&validator)?.into_string();
-    let denom = amount.denom.clone();
-    let requested = amount.amount;
+    let denom = deps.querier.query_bonded_denom()?;
+    let requested = Uint256::from(amount);
+
+    if let Some(debt) = OUTSTANDING_DEBT.may_load(deps.storage)? {
+        if !debt.amount.is_zero() {
+            return Err(ContractError::OutstandingDebt { amount: debt.amount });
+        }
+    }
 
     let balance = deps
         .querier
@@ -48,16 +59,18 @@ pub fn execute(
         });
     }
 
+    let delegate_coin = Coin::new(requested, denom.clone());
+
     Ok(Response::new()
         .add_message(StakingMsg::Delegate {
             validator: validator_addr.clone(),
-            amount: amount.clone(),
+            amount: delegate_coin.clone(),
         })
         .add_attributes([
             attr("action", "delegate"),
             attr("validator", validator_addr),
             attr("denom", denom),
-            attr("amount", requested.to_string()),
+            attr("amount", amount.to_string()),
         ]))
 }
 
@@ -65,7 +78,9 @@ pub fn execute(
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
-    use cosmwasm_std::{coins, Decimal, Validator};
+    use cosmwasm_std::{coins, Coin, Decimal, Uint128, Validator};
+
+    use crate::types::OutstandingDebt;
 
     #[test]
     fn fails_for_unauthorized_sender() {
@@ -76,7 +91,7 @@ mod tests {
             .expect("owner stored");
 
         let info = message_info(&deps.api.addr_make("intruder"), &[]);
-        let amount = Coin::new(10u128, "ucosm");
+        let amount = Uint128::new(10);
         let validator = deps.api.addr_make("validator").into_string();
         let err = execute(deps.as_mut(), mock_env(), info, validator, amount).unwrap_err();
 
@@ -93,14 +108,8 @@ mod tests {
 
         let info = message_info(&owner, &[]);
         let validator = deps.api.addr_make("validator").into_string();
-        let err = execute(
-            deps.as_mut(),
-            mock_env(),
-            info,
-            validator,
-            Coin::new(0u128, "ucosm"),
-        )
-        .unwrap_err();
+        let err = execute(deps.as_mut(), mock_env(), info, validator, Uint128::zero())
+            .unwrap_err();
 
         assert!(matches!(err, ContractError::InvalidDelegationAmount {}));
     }
@@ -115,14 +124,8 @@ mod tests {
 
         let info = message_info(&owner, &coins(10, "ucosm"));
         let validator = deps.api.addr_make("validator").into_string();
-        let err = execute(
-            deps.as_mut(),
-            mock_env(),
-            info,
-            validator,
-            Coin::new(10u128, "ucosm"),
-        )
-        .unwrap_err();
+        let err = execute(deps.as_mut(), mock_env(), info, validator, Uint128::new(10))
+            .unwrap_err();
 
         assert!(matches!(err, ContractError::FundsNotAccepted {}));
     }
@@ -141,7 +144,7 @@ mod tests {
             .update_balance(contract_addr.as_str(), coins(50, "ucosm"));
 
         let info = message_info(&owner, &[]);
-        let amount = Coin::new(100u128, "ucosm");
+        let amount = Uint128::new(100);
 
         let validator = deps.api.addr_make("validator").into_string();
         let err = execute(deps.as_mut(), mock_env(), info, validator, amount).unwrap_err();
@@ -158,22 +161,47 @@ mod tests {
             .expect("owner stored");
 
         let env = mock_env();
+        deps.querier.staking.update("ucosm", &[], &[]);
         deps.querier
             .bank
             .update_balance(env.contract.address.as_str(), coins(100, "ucosm"));
 
         let info = message_info(&owner, &[]);
         let validator = deps.api.addr_make("validator").into_string();
+        let err = execute(deps.as_mut(), env, info, validator, Uint128::new(50)).unwrap_err();
+
+        assert!(matches!(err, ContractError::ValidatorNotFound { .. }));
+    }
+
+    #[test]
+    fn fails_when_outstanding_debt_exists_for_denom() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        OWNER
+            .save(deps.as_mut().storage, &owner)
+            .expect("owner stored");
+
+        OUTSTANDING_DEBT
+            .save(
+                deps.as_mut().storage,
+                &OutstandingDebt {
+                    amount: Uint128::new(500),
+                },
+            )
+            .expect("debt stored");
+
+        let info = message_info(&owner, &[]);
+        let validator = deps.api.addr_make("validator").into_string();
         let err = execute(
             deps.as_mut(),
-            env,
+            mock_env(),
             info,
             validator,
-            Coin::new(50u128, "ucosm"),
+            Uint128::new(50),
         )
         .unwrap_err();
 
-        assert!(matches!(err, ContractError::ValidatorNotFound { .. }));
+        assert!(matches!(err, ContractError::OutstandingDebt { amount } if amount == Uint128::new(500)));
     }
 
     #[test]
@@ -203,14 +231,14 @@ mod tests {
         deps.querier.staking.update(denom, &[validator_obj], &[]);
 
         let info = message_info(&owner, &[]);
-        let amount = Coin::new(150u128, denom);
+        let amount = Uint128::new(150);
 
         let response = execute(
             deps.as_mut(),
             env,
             info,
             validator_addr.clone(),
-            amount.clone(),
+            amount,
         )
         .expect("delegation succeeds");
 
@@ -222,7 +250,7 @@ mod tests {
                 amount: delegated,
             }) => {
                 assert_eq!(validator, validator_addr);
-                assert_eq!(delegated, amount);
+                assert_eq!(delegated, Coin::new(amount, denom));
             }
             _ => panic!("unexpected message"),
         }

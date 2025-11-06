@@ -1,4 +1,4 @@
-use cosmwasm_std::{StdError, Uint256};
+use cosmwasm_std::{StdError, Uint128, Uint256};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -21,6 +21,9 @@ pub enum ContractError {
         available: Uint256,
         requested: Uint256,
     },
+
+    #[error("Outstanding debt of {amount} must be settled before delegating")]
+    OutstandingDebt { amount: Uint128 },
 
     #[error("Validator not found: {validator}")]
     ValidatorNotFound { validator: String },

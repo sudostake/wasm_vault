@@ -1,4 +1,4 @@
-use cosmwasm_std::{coin, coins, BankMsg, Uint256};
+use cosmwasm_std::{coins, BankMsg, Uint128, Uint256};
 use cw_multi_test::Executor;
 
 use crate::common::{mock_app, store_contract, DENOM};
@@ -35,7 +35,7 @@ fn owner_can_delegate_existing_vault_funds() {
     .expect("funding succeeds");
 
     let validator = app.api().addr_make("validator").into_string();
-    let amount = 400u128;
+    let amount = Uint128::new(400);
 
     let response = app
         .execute_contract(
@@ -43,7 +43,7 @@ fn owner_can_delegate_existing_vault_funds() {
             contract_addr.clone(),
             &ExecuteMsg::Delegate {
                 validator: validator.clone(),
-                amount: coin(amount, DENOM),
+                amount,
             },
             &[],
         )
@@ -70,7 +70,7 @@ fn owner_can_delegate_existing_vault_funds() {
         .wrap()
         .query_balance(contract_addr.clone(), DENOM)
         .expect("balance query should succeed");
-    assert_eq!(balance.amount, Uint256::from(500u128 - amount));
+    assert_eq!(balance.amount, Uint256::from(500u128 - amount.u128()));
 }
 
 #[test]
@@ -100,7 +100,7 @@ fn non_owner_cannot_delegate() {
             contract_addr,
             &ExecuteMsg::Delegate {
                 validator: app.api().addr_make("validator").into_string(),
-                amount: coin(100, DENOM),
+                amount: Uint128::new(100),
             },
             &[],
         )
