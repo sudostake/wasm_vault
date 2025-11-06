@@ -2,9 +2,7 @@ use cosmwasm_std::{to_json_binary, Addr, Event, WasmMsg};
 use cw2::query_contract_info;
 use cw_multi_test::{AppResponse, Executor};
 
-mod common;
-
-use common::{mock_app, store_contract};
+use crate::common::{mock_app, store_contract};
 
 use wasm_vault::msg::InstantiateMsg;
 use wasm_vault::state::OWNER;
