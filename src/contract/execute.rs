@@ -24,7 +24,7 @@ pub fn execute(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::OWNER;
+    use crate::state::{OUTSTANDING_DEBT, OWNER};
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
     use cosmwasm_std::{coins, Uint128};
 
@@ -48,6 +48,9 @@ mod tests {
         OWNER
             .save(deps.as_mut().storage, &owner)
             .expect("owner stored");
+        OUTSTANDING_DEBT
+            .save(deps.as_mut().storage, &0u128)
+            .expect("zero debt stored");
 
         deps.querier.staking.update("ucosm", &[], &[]);
         deps.querier
