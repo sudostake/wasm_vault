@@ -1,3 +1,4 @@
+mod delegate;
 mod execute;
 mod instantiate;
 mod query;
