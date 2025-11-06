@@ -1,13 +1,13 @@
-use cosmwasm_std::{Addr, Uint128};
+use cosmwasm_std::Addr;
 use cw_storage_plus::Item;
 
 pub const OWNER: Item<Addr> = Item::new("owner");
-pub const OUTSTANDING_DEBT: Item<Uint128> = Item::new("outstanding_debt");
+pub const OUTSTANDING_DEBT: Item<u128> = Item::new("outstanding_debt");
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cosmwasm_std::{testing::mock_dependencies, Uint128};
+    use cosmwasm_std::testing::mock_dependencies;
 
     #[test]
     fn owner_item_persists_addresses() {
@@ -27,7 +27,7 @@ mod tests {
     #[test]
     fn outstanding_debt_item_handles_amount() {
         let mut deps = mock_dependencies();
-        let amount = Uint128::new(50);
+        let amount = 50u128;
 
         OUTSTANDING_DEBT
             .save(deps.as_mut().storage, &amount)

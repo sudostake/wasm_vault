@@ -49,7 +49,7 @@ mod tests {
             .save(deps.as_mut().storage, &owner)
             .expect("owner stored");
         OUTSTANDING_DEBT
-            .save(deps.as_mut().storage, &Uint128::zero())
+            .save(deps.as_mut().storage, &0u128)
             .expect("zero debt stored");
 
         deps.querier.staking.update("ucosm", &[], &[]);

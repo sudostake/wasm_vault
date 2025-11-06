@@ -1,6 +1,6 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{DepsMut, Env, MessageInfo, Response, Uint128};
+use cosmwasm_std::{DepsMut, Env, MessageInfo, Response};
 use cw2::set_contract_version;
 
 use crate::error::ContractError;
@@ -25,7 +25,7 @@ pub fn instantiate(
         None => info.sender.clone(),
     };
     OWNER.save(deps.storage, &owner)?;
-    OUTSTANDING_DEBT.save(deps.storage, &Uint128::zero())?;
+    OUTSTANDING_DEBT.save(deps.storage, &0u128)?;
 
     Ok(Response::new()
         .add_attribute("method", "instantiate")
@@ -61,7 +61,7 @@ mod tests {
         assert_eq!(saved_owner, owner);
 
         let debt = OUTSTANDING_DEBT.load(&deps.storage).unwrap();
-        assert!(debt.is_zero());
+        assert_eq!(debt, 0u128);
     }
 
     #[test]
@@ -78,6 +78,6 @@ mod tests {
         assert_eq!(saved_owner, sender);
 
         let debt = OUTSTANDING_DEBT.load(&deps.storage).unwrap();
-        assert!(debt.is_zero());
+        assert_eq!(debt, 0u128);
     }
 }

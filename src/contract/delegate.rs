@@ -30,8 +30,10 @@ pub fn execute(
     let requested = Uint256::from(amount);
 
     let debt = OUTSTANDING_DEBT.load(deps.storage)?;
-    if !debt.is_zero() {
-        return Err(ContractError::OutstandingDebt { amount: debt });
+    if debt > 0 {
+        return Err(ContractError::OutstandingDebt {
+            amount: Uint128::from(debt),
+        });
     }
 
     let balance = deps
@@ -79,9 +81,7 @@ mod tests {
 
     fn setup_owner_and_zero_debt(storage: &mut dyn Storage, owner: &Addr) {
         OWNER.save(storage, owner).expect("owner stored");
-        OUTSTANDING_DEBT
-            .save(storage, &Uint128::zero())
-            .expect("zero debt stored");
+        OUTSTANDING_DEBT.save(storage, &0u128).expect("zero debt stored");
     }
 
     #[test]
@@ -171,7 +171,7 @@ mod tests {
         setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
 
         OUTSTANDING_DEBT
-            .save(deps.as_mut().storage, &Uint128::new(500))
+            .save(deps.as_mut().storage, &500u128)
             .expect("debt stored");
 
         let info = message_info(&owner, &[]);
