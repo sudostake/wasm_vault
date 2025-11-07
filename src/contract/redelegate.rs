@@ -23,7 +23,7 @@ pub fn execute(
     }
 
     let debt = OUTSTANDING_DEBT.load(deps.storage)?;
-    if debt > 0 {
+    if !Uint128::from(debt).is_zero() {
         return Err(ContractError::OutstandingDebt {
             amount: Uint128::from(debt),
         });
