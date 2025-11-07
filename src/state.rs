@@ -39,9 +39,9 @@ mod tests {
         assert_eq!(loaded, Some(address));
 
         // Ensure the default state can be absent
-        let deps = mock_dependencies();
+        let fresh_deps = mock_dependencies();
         let missing = LENDER
-            .may_load(deps.as_ref().storage)
+            .may_load(fresh_deps.as_ref().storage)
             .expect("may_load succeeds");
 
         assert!(missing.is_none());
