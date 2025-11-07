@@ -7,6 +7,7 @@ mod redelegate;
 mod undelegate;
 mod vote;
 mod withdraw;
+mod transfer;
 
 pub use execute::execute;
 pub use instantiate::instantiate;
