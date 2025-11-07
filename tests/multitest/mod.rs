@@ -1,3 +1,4 @@
+mod test_claim_rewards;
 mod test_delegate;
 mod test_instantiate;
 mod test_redelegate;

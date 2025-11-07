@@ -23,6 +23,7 @@ pub enum ExecuteMsg {
         dst_validator: String,
         amount: Uint128,
     },
+    ClaimDelegatorRewards {},
     Withdraw {
         denom: String,
         amount: Uint128,

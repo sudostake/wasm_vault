@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{DepsMut, Env, MessageInfo, Response};
 
-use super::{delegate, redelegate, undelegate, withdraw};
+use super::{claim, delegate, redelegate, undelegate, withdraw};
 use crate::error::ContractError;
 use crate::msg::ExecuteMsg;
 
@@ -26,6 +26,7 @@ pub fn execute(
             dst_validator,
             amount,
         } => redelegate::execute(deps, env, info, src_validator, dst_validator, amount),
+        ExecuteMsg::ClaimDelegatorRewards {} => claim::execute(deps, env, info),
         ExecuteMsg::Withdraw {
             denom,
             amount,
@@ -176,5 +177,25 @@ mod tests {
         .unwrap_err();
 
         assert!(matches!(err, ContractError::InsufficientBalance { .. }));
+    }
+
+    #[test]
+    fn execute_claim_rewards_flows_through_module() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        OWNER
+            .save(deps.as_mut().storage, &owner)
+            .expect("owner stored");
+
+        let env = mock_env();
+        let err = execute(
+            deps.as_mut(),
+            env,
+            message_info(&owner, &[]),
+            ExecuteMsg::ClaimDelegatorRewards {},
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ContractError::NoDelegations {}));
     }
 }
