@@ -2,6 +2,7 @@ use cosmwasm_std::Addr;
 use cw_storage_plus::Item;
 
 pub const OWNER: Item<Addr> = Item::new("owner");
+pub const LENDER: Item<Option<Addr>> = Item::new("lender");
 pub const OUTSTANDING_DEBT: Item<u128> = Item::new("outstanding_debt");
 
 #[cfg(test)]
@@ -22,6 +23,28 @@ mod tests {
             .expect("load retrieves saved address");
 
         assert_eq!(loaded, address);
+    }
+
+    #[test]
+    fn lender_item_handles_optional_addresses() {
+        let mut deps = mock_dependencies();
+        let address = Addr::unchecked("lender");
+
+        // Save and load a concrete lender address
+        LENDER
+            .save(deps.as_mut().storage, &Some(address.clone()))
+            .expect("save succeeds");
+        let loaded = LENDER.load(deps.as_ref().storage).expect("load succeeds");
+
+        assert_eq!(loaded, Some(address));
+
+        // Ensure the default state can be absent
+        let fresh_deps = mock_dependencies();
+        let missing = LENDER
+            .may_load(fresh_deps.as_ref().storage)
+            .expect("may_load succeeds");
+
+        assert!(missing.is_none());
     }
 
     #[test]

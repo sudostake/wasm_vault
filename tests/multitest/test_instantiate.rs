@@ -5,7 +5,7 @@ use cw_multi_test::{AppResponse, Executor};
 use crate::common::{mock_app, store_contract};
 
 use wasm_vault::msg::InstantiateMsg;
-use wasm_vault::state::OWNER;
+use wasm_vault::state::{LENDER, OWNER};
 
 #[test]
 fn instantiate_respects_explicit_owner() {
@@ -47,6 +47,11 @@ fn instantiate_respects_explicit_owner() {
         .expect("owner should be persisted");
     assert_eq!(saved_owner, explicit_owner);
 
+    let saved_lender = LENDER
+        .query(&app.wrap(), contract_addr.clone())
+        .expect("lender storage should exist");
+    assert!(saved_lender.is_none());
+
     let contract_version = query_contract_info(&app.wrap(), contract_addr).unwrap();
     assert_eq!(contract_version.contract, "crates.io:wasm_vault");
     assert_eq!(contract_version.version, env!("CARGO_PKG_VERSION"));
@@ -85,9 +90,14 @@ fn instantiate_defaults_to_sender() {
     let contract_addr = contract_address_from_response(&response);
 
     let saved_owner = OWNER
-        .query(&app.wrap(), contract_addr)
+        .query(&app.wrap(), contract_addr.clone())
         .expect("owner should default to sender");
     assert_eq!(saved_owner, sender);
+
+    let saved_lender = LENDER
+        .query(&app.wrap(), contract_addr)
+        .expect("lender should default to none");
+    assert!(saved_lender.is_none());
 }
 
 fn contract_address_from_response(response: &AppResponse) -> Addr {
