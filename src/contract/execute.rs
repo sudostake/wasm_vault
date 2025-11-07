@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{DepsMut, Env, MessageInfo, Response};
 
-use super::{claim, delegate, redelegate, undelegate, withdraw};
+use super::{claim, delegate, redelegate, undelegate, vote, withdraw};
 use crate::error::ContractError;
 use crate::msg::ExecuteMsg;
 
@@ -32,6 +32,14 @@ pub fn execute(
             amount,
             recipient,
         } => withdraw::execute(deps, env, info, denom, amount, recipient),
+        ExecuteMsg::Vote {
+            proposal_id,
+            option,
+        } => vote::execute_vote(deps, env, info, proposal_id, option),
+        ExecuteMsg::VoteWeighted {
+            proposal_id,
+            options,
+        } => vote::execute_weighted_vote(deps, env, info, proposal_id, options),
     }
 }
 

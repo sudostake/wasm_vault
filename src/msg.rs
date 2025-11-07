@@ -1,6 +1,6 @@
 pub use crate::types::InfoResponse;
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::Uint128;
+use cosmwasm_std::{Uint128, VoteOption, WeightedVoteOption};
 
 #[cw_serde]
 pub struct InstantiateMsg {
@@ -28,6 +28,14 @@ pub enum ExecuteMsg {
         denom: String,
         amount: Uint128,
         recipient: Option<String>,
+    },
+    Vote {
+        proposal_id: u64,
+        option: VoteOption,
+    },
+    VoteWeighted {
+        proposal_id: u64,
+        options: Vec<WeightedVoteOption>,
     },
 }
 
