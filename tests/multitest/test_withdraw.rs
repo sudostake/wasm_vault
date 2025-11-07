@@ -1,4 +1,4 @@
-use cosmwasm_std::{coins, BankMsg, Uint128};
+use cosmwasm_std::{coins, BankMsg, Uint128, Uint256};
 use cw_multi_test::Executor;
 
 use crate::common::{mock_app, store_contract, DENOM};
@@ -70,7 +70,7 @@ fn owner_can_withdraw_to_self() {
         .amount;
     assert_eq!(
         owner_balance_after,
-        owner_balance_before + withdraw_amount
+        owner_balance_before + Uint256::from(withdraw_amount)
     );
 
     let contract_balance = app
@@ -80,7 +80,7 @@ fn owner_can_withdraw_to_self() {
         .amount;
     assert_eq!(
         contract_balance,
-        Uint128::new(funding_amount) - withdraw_amount
+        Uint256::from(funding_amount - withdraw_amount.u128())
     );
 }
 
@@ -140,7 +140,7 @@ fn owner_can_withdraw_to_custom_recipient() {
         .amount;
     assert_eq!(
         recipient_balance_after,
-        recipient_balance_before + withdraw_amount
+        recipient_balance_before + Uint256::from(withdraw_amount)
     );
 
     let contract_balance = app
@@ -150,7 +150,7 @@ fn owner_can_withdraw_to_custom_recipient() {
         .amount;
     assert_eq!(
         contract_balance,
-        Uint128::new(750) - withdraw_amount
+        Uint256::from(750u128 - withdraw_amount.u128())
     );
 }
 
