@@ -2,10 +2,7 @@ use cosmwasm_std::{
     attr, DepsMut, Env, GovMsg, MessageInfo, Response, VoteOption, WeightedVoteOption,
 };
 
-use crate::{
-    state::OWNER,
-    ContractError,
-};
+use crate::{state::OWNER, ContractError};
 
 pub fn execute_vote(
     deps: DepsMut,
