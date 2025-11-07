@@ -17,10 +17,6 @@ pub fn execute(
         return Err(ContractError::Unauthorized {});
     }
 
-    if !info.funds.is_empty() {
-        return Err(ContractError::FundsNotAccepted {});
-    }
-
     if amount.is_zero() {
         return Err(ContractError::InvalidDelegationAmount {});
     }
@@ -111,20 +107,6 @@ mod tests {
         let err = execute(deps.as_mut(), mock_env(), info, validator, Uint128::zero()).unwrap_err();
 
         assert!(matches!(err, ContractError::InvalidDelegationAmount {}));
-    }
-
-    #[test]
-    fn fails_when_funds_attached() {
-        let mut deps = mock_dependencies();
-        let owner = deps.api.addr_make("owner");
-        setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
-
-        let info = message_info(&owner, &coins(10, "ucosm"));
-        let validator = deps.api.addr_make("validator").into_string();
-        let err =
-            execute(deps.as_mut(), mock_env(), info, validator, Uint128::new(10)).unwrap_err();
-
-        assert!(matches!(err, ContractError::FundsNotAccepted {}));
     }
 
     #[test]

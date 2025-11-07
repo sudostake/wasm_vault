@@ -12,9 +12,6 @@ pub enum ContractError {
     #[error("Delegation amount must be greater than zero")]
     InvalidDelegationAmount {},
 
-    #[error("Funds not accepted for this action")]
-    FundsNotAccepted {},
-
     #[error("Insufficient balance: have {available} {denom}, need {requested}")]
     InsufficientBalance {
         denom: String,
