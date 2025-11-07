@@ -37,10 +37,11 @@ pub fn execute(
         .querier
         .query_balance(env.contract.address.clone(), denom.clone())?;
 
-    if balance.amount < requested {
+    let available = Uint256::from(balance.amount);
+    if available < requested {
         return Err(ContractError::InsufficientBalance {
             denom: denom.clone(),
-            available: balance.amount,
+            available,
             requested,
         });
     }
