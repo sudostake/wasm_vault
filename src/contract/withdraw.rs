@@ -51,7 +51,7 @@ pub fn execute(
     };
     let recipient_str = recipient_addr.to_string();
 
-    let withdraw_coin = Coin::new(requested, denom.clone());
+    let withdraw_coin = Coin::new(amount, denom.clone());
 
     Ok(Response::new()
         .add_message(BankMsg::Send {
@@ -191,7 +191,7 @@ mod tests {
         match msg {
             cosmwasm_std::CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
                 assert_eq!(to_address, owner.to_string());
-                assert_eq!(amount, vec![Coin::new(Uint256::from(150u128), "ucosm")]);
+                assert_eq!(amount, vec![Coin::new(150u128, "ucosm")]);
             }
             _ => panic!("unexpected message"),
         }
@@ -224,7 +224,7 @@ mod tests {
         match msg {
             cosmwasm_std::CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
                 assert_eq!(to_address, recipient.to_string());
-                assert_eq!(amount, vec![Coin::new(Uint256::from(200u128), "ucosm")]);
+                assert_eq!(amount, vec![Coin::new(200u128, "ucosm")]);
             }
             _ => panic!("unexpected message"),
         }
@@ -263,7 +263,7 @@ mod tests {
         match msg {
             cosmwasm_std::CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
                 assert_eq!(to_address, owner.to_string());
-                assert_eq!(amount, vec![Coin::new(Uint256::from(250u128), other_denom)]);
+                assert_eq!(amount, vec![Coin::new(250u128, other_denom)]);
             }
             _ => panic!("unexpected message"),
         }
