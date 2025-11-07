@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{DepsMut, Env, MessageInfo, Response};
 
-use super::{claim, delegate, redelegate, undelegate, vote, withdraw};
+use super::{claim, delegate, redelegate, transfer, undelegate, vote, withdraw};
 use crate::error::ContractError;
 use crate::msg::ExecuteMsg;
 
@@ -40,6 +40,7 @@ pub fn execute(
             proposal_id,
             options,
         } => vote::execute_weighted_vote(deps, env, info, proposal_id, options),
+        ExecuteMsg::TransferOwnership { new_owner } => transfer::execute(deps, info, new_owner),
     }
 }
 
@@ -205,5 +206,26 @@ mod tests {
         .unwrap_err();
 
         assert!(matches!(err, ContractError::NoDelegations {}));
+    }
+
+    #[test]
+    fn execute_transfer_ownership_flows_through_module() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        OWNER
+            .save(deps.as_mut().storage, &owner)
+            .expect("owner stored");
+
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&owner, &[]),
+            ExecuteMsg::TransferOwnership {
+                new_owner: owner.to_string(),
+            },
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ContractError::OwnershipUnchanged {}));
     }
 }

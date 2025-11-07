@@ -37,6 +37,9 @@ pub enum ExecuteMsg {
         proposal_id: u64,
         options: Vec<WeightedVoteOption>,
     },
+    TransferOwnership {
+        new_owner: String,
+    },
 }
 
 #[cw_serde]

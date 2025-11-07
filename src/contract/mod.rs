@@ -4,6 +4,7 @@ mod execute;
 mod instantiate;
 mod query;
 mod redelegate;
+mod transfer;
 mod undelegate;
 mod vote;
 mod withdraw;

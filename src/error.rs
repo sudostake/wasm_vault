@@ -9,6 +9,9 @@ pub enum ContractError {
     #[error("Unauthorized")]
     Unauthorized {},
 
+    #[error("New owner must be different from the current owner")]
+    OwnershipUnchanged {},
+
     #[error("Delegation amount must be greater than zero")]
     InvalidDelegationAmount {},
 
