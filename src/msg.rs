@@ -11,6 +11,7 @@ pub struct InstantiateMsg {
 pub enum ExecuteMsg {
     Noop {},
     Delegate { validator: String, amount: Uint128 },
+    Undelegate { validator: String, amount: Uint128 },
 }
 
 #[cw_serde]
