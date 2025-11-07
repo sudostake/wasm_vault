@@ -46,4 +46,7 @@ pub enum ContractError {
         delegated: Uint256,
         requested: Uint256,
     },
+
+    #[error("No delegations found to claim rewards from")]
+    NoDelegations {},
 }

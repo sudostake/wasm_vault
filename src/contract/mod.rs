@@ -1,3 +1,4 @@
+mod claim;
 mod delegate;
 mod execute;
 mod instantiate;
