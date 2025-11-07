@@ -80,7 +80,7 @@ fn owner_can_withdraw_to_self() {
         .amount;
     assert_eq!(
         contract_balance,
-        Uint128::from(funding_amount - withdraw_amount.u128())
+        Uint128::new(funding_amount) - withdraw_amount
     );
 }
 
@@ -150,7 +150,7 @@ fn owner_can_withdraw_to_custom_recipient() {
         .amount;
     assert_eq!(
         contract_balance,
-        Uint128::from(750u128 - withdraw_amount.u128())
+        Uint128::new(750) - withdraw_amount
     );
 }
 
