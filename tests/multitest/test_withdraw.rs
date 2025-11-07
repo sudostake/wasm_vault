@@ -70,7 +70,7 @@ fn owner_can_withdraw_to_self() {
         .amount;
     assert_eq!(
         owner_balance_after,
-        owner_balance_before + Uint256::from(withdraw_amount)
+        Uint256::from(owner_balance_before) + Uint256::from(withdraw_amount)
     );
 
     let contract_balance = app
@@ -140,7 +140,7 @@ fn owner_can_withdraw_to_custom_recipient() {
         .amount;
     assert_eq!(
         recipient_balance_after,
-        recipient_balance_before + Uint256::from(withdraw_amount)
+        Uint256::from(recipient_balance_before) + Uint256::from(withdraw_amount)
     );
 
     let contract_balance = app
