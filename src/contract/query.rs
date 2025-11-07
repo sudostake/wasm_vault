@@ -3,7 +3,7 @@ use cosmwasm_std::entry_point;
 use cosmwasm_std::{to_json_binary, Deps, Env, QueryResponse, StdResult};
 
 use crate::msg::QueryMsg;
-use crate::state::OWNER;
+use crate::state::{LENDER, OWNER};
 use crate::types::InfoResponse;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -15,10 +15,12 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<QueryResponse> {
 
 fn query_info(deps: Deps) -> StdResult<QueryResponse> {
     let owner = OWNER.load(deps.storage)?;
+    let lender = LENDER.may_load(deps.storage)?.flatten();
 
     let response = InfoResponse {
         message: "wasm_vault".to_string(),
         owner: owner.into_string(),
+        lender: lender.map(|addr| addr.into_string()),
     };
 
     to_json_binary(&response)
@@ -30,13 +32,17 @@ mod tests {
     use cosmwasm_std::testing::{mock_dependencies, mock_env};
 
     #[test]
-    fn query_info_returns_owner() {
+    fn query_info_returns_owner_and_lender() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
+        let lender = deps.api.addr_make("lender");
 
         OWNER
             .save(deps.as_mut().storage, &owner)
             .expect("owner saved");
+        LENDER
+            .save(deps.as_mut().storage, &Some(lender.clone()))
+            .expect("lender saved");
 
         let response = query(deps.as_ref(), mock_env(), QueryMsg::Info).expect("query succeeds");
 
@@ -44,6 +50,24 @@ mod tests {
 
         assert_eq!(info.message, "wasm_vault");
         assert_eq!(info.owner, owner.into_string());
+        assert_eq!(info.lender, Some(lender.into_string()));
+    }
+
+    #[test]
+    fn query_info_works_without_lender_entry() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+
+        OWNER
+            .save(deps.as_mut().storage, &owner)
+            .expect("owner saved");
+        // Deliberately omit saving the LENDER item to simulate older deployments
+
+        let response = query(deps.as_ref(), mock_env(), QueryMsg::Info).expect("query succeeds");
+
+        let info: InfoResponse = cosmwasm_std::from_json(response).expect("valid json");
+
+        assert_eq!(info.lender, None);
     }
 
     #[test]
