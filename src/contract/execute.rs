@@ -40,9 +40,7 @@ pub fn execute(
             proposal_id,
             options,
         } => vote::execute_weighted_vote(deps, env, info, proposal_id, options),
-        ExecuteMsg::TransferOwnership { new_owner } => {
-            transfer::execute(deps, info, new_owner)
-        }
+        ExecuteMsg::TransferOwnership { new_owner } => transfer::execute(deps, info, new_owner),
     }
 }
 

@@ -60,12 +60,7 @@ mod tests {
             .save(deps.as_mut().storage, &owner)
             .expect("owner stored");
 
-        let err = execute(
-            deps.as_mut(),
-            message_info(&owner, &[]),
-            owner.to_string(),
-        )
-        .unwrap_err();
+        let err = execute(deps.as_mut(), message_info(&owner, &[]), owner.to_string()).unwrap_err();
 
         assert!(matches!(err, ContractError::OwnershipUnchanged {}));
     }
@@ -96,11 +91,13 @@ mod tests {
             .attributes
             .iter()
             .any(|attr| attr.key == "action" && attr.value == "transfer_ownership"));
-        assert!(response.attributes.iter().any(|attr| {
-            attr.key == "previous_owner" && attr.value == owner.to_string()
-        }));
-        assert!(response.attributes.iter().any(|attr| {
-            attr.key == "new_owner" && attr.value == new_owner.to_string()
-        }));
+        assert!(response
+            .attributes
+            .iter()
+            .any(|attr| { attr.key == "previous_owner" && attr.value == owner.to_string() }));
+        assert!(response
+            .attributes
+            .iter()
+            .any(|attr| { attr.key == "new_owner" && attr.value == new_owner.to_string() }));
     }
 }
