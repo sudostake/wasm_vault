@@ -40,4 +40,4 @@ serde = { version = "1.0.228", default-features = false, features = ["derive"] }
 thiserror = { version = "2.0.17" }
 
 [dev-dependencies]
-cw-multi-test = { version = "3.0.1", features = ["staking", "cosmwasm_3_0"] }
+cw-multi-test = { version = "3.0.1", features = ["staking", "cosmwasm_3_0", "stargate"] }
