@@ -28,6 +28,12 @@ pub enum ContractError {
     #[error("Undelegation amount must be greater than zero")]
     InvalidUndelegationAmount {},
 
+    #[error("Redelegation amount must be greater than zero")]
+    InvalidRedelegationAmount {},
+
+    #[error("Cannot redelegate to the same validator")]
+    RedelegateToSameValidator {},
+
     #[error("Delegation not found for validator {validator}")]
     DelegationNotFound { validator: String },
 

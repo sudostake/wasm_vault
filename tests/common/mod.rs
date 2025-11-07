@@ -36,16 +36,26 @@ pub fn mock_app() -> BasicApp {
 
     let block_info = app.block_info();
     app.init_modules(|router, api, storage| {
-        let validator = Validator::create(
+        let validator_one = Validator::create(
             api.addr_make("validator").into_string(),
             Decimal::percent(5),
             Decimal::percent(10),
             Decimal::percent(1),
         );
+        let validator_two = Validator::create(
+            api.addr_make("validator-two").into_string(),
+            Decimal::percent(4),
+            Decimal::percent(9),
+            Decimal::percent(1),
+        );
 
         router
             .staking
-            .add_validator(api, storage, &block_info, validator)
+            .add_validator(api, storage, &block_info, validator_one)
+            .unwrap();
+        router
+            .staking
+            .add_validator(api, storage, &block_info, validator_two)
             .unwrap();
     });
 
