@@ -12,7 +12,7 @@ pub enum ContractError {
     #[error("Delegation amount must be greater than zero")]
     InvalidDelegationAmount {},
 
-    #[error("Funds not accepted for delegation")]
+    #[error("Funds not accepted for this action")]
     FundsNotAccepted {},
 
     #[error("Insufficient balance: have {available} {denom}, need {requested}")]
@@ -27,4 +27,17 @@ pub enum ContractError {
 
     #[error("Validator not found: {validator}")]
     ValidatorNotFound { validator: String },
+
+    #[error("Undelegation amount must be greater than zero")]
+    InvalidUndelegationAmount {},
+
+    #[error("Delegation not found for validator {validator}")]
+    DelegationNotFound { validator: String },
+
+    #[error("Insufficient delegated balance for validator {validator}: have {delegated}, need {requested}")]
+    InsufficientDelegatedBalance {
+        validator: String,
+        delegated: Uint256,
+        requested: Uint256,
+    },
 }

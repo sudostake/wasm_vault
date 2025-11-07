@@ -2,6 +2,7 @@ mod delegate;
 mod execute;
 mod instantiate;
 mod query;
+mod undelegate;
 
 pub use execute::execute;
 pub use instantiate::instantiate;
