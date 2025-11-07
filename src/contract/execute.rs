@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{DepsMut, Env, MessageInfo, Response};
 
-use super::{delegate, redelegate, undelegate};
+use super::{delegate, redelegate, undelegate, withdraw};
 use crate::error::ContractError;
 use crate::msg::ExecuteMsg;
 
@@ -26,6 +26,11 @@ pub fn execute(
             dst_validator,
             amount,
         } => redelegate::execute(deps, env, info, src_validator, dst_validator, amount),
+        ExecuteMsg::Withdraw {
+            denom,
+            amount,
+            recipient,
+        } => withdraw::execute(deps, env, info, denom, amount, recipient),
     }
 }
 
@@ -144,5 +149,32 @@ mod tests {
             err,
             ContractError::DelegationNotFound { validator: v } if v == src_validator
         ));
+    }
+
+    #[test]
+    fn execute_withdraw_flows_through_module() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        OWNER
+            .save(deps.as_mut().storage, &owner)
+            .expect("owner stored");
+        OUTSTANDING_DEBT
+            .save(deps.as_mut().storage, &0u128)
+            .expect("zero debt stored");
+
+        let env = mock_env();
+        let err = execute(
+            deps.as_mut(),
+            env,
+            message_info(&owner, &[]),
+            ExecuteMsg::Withdraw {
+                denom: "ucosm".to_string(),
+                amount: Uint128::new(50),
+                recipient: None,
+            },
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ContractError::InsufficientBalance { .. }));
     }
 }

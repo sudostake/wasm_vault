@@ -23,6 +23,11 @@ pub enum ExecuteMsg {
         dst_validator: String,
         amount: Uint128,
     },
+    Withdraw {
+        denom: String,
+        amount: Uint128,
+        recipient: Option<String>,
+    },
 }
 
 #[cw_serde]

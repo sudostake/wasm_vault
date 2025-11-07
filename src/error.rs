@@ -31,6 +31,9 @@ pub enum ContractError {
     #[error("Redelegation amount must be greater than zero")]
     InvalidRedelegationAmount {},
 
+    #[error("Withdrawal amount must be greater than zero")]
+    InvalidWithdrawalAmount {},
+
     #[error("Cannot redelegate to the same validator")]
     RedelegateToSameValidator {},
 

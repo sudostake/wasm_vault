@@ -4,6 +4,7 @@ mod instantiate;
 mod query;
 mod redelegate;
 mod undelegate;
+mod withdraw;
 
 pub use execute::execute;
 pub use instantiate::instantiate;
