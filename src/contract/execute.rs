@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{DepsMut, Env, MessageInfo, Response};
 
-use super::{delegate, undelegate};
+use super::{delegate, redelegate, undelegate};
 use crate::error::ContractError;
 use crate::msg::ExecuteMsg;
 
@@ -21,6 +21,11 @@ pub fn execute(
         ExecuteMsg::Undelegate { validator, amount } => {
             undelegate::execute(deps, env, info, validator, amount)
         }
+        ExecuteMsg::Redelegate {
+            src_validator,
+            dst_validator,
+            amount,
+        } => redelegate::execute(deps, env, info, src_validator, dst_validator, amount),
     }
 }
 
@@ -105,6 +110,39 @@ mod tests {
         assert!(matches!(
             err,
             ContractError::DelegationNotFound { validator: v } if v == validator
+        ));
+    }
+
+    #[test]
+    fn execute_redelegate_flows_through_module() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        OWNER
+            .save(deps.as_mut().storage, &owner)
+            .expect("owner stored");
+        OUTSTANDING_DEBT
+            .save(deps.as_mut().storage, &0u128)
+            .expect("zero debt stored");
+
+        let src_validator = deps.api.addr_make("validator").into_string();
+        let dst_validator = deps.api.addr_make("validator-two").into_string();
+        let env = mock_env();
+
+        let err = execute(
+            deps.as_mut(),
+            env,
+            message_info(&owner, &[]),
+            ExecuteMsg::Redelegate {
+                src_validator: src_validator.clone(),
+                dst_validator,
+                amount: Uint128::new(50),
+            },
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            err,
+            ContractError::DelegationNotFound { validator: v } if v == src_validator
         ));
     }
 }
