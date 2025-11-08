@@ -2,7 +2,7 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{DepsMut, Env, MessageInfo, Response};
 
-use super::{claim, delegate, redelegate, transfer, undelegate, vote, withdraw};
+use super::{claim, delegate, open_interest, redelegate, transfer, undelegate, vote, withdraw};
 use crate::error::ContractError;
 use crate::msg::ExecuteMsg;
 
@@ -41,13 +41,19 @@ pub fn execute(
             options,
         } => vote::execute_weighted_vote(deps, env, info, proposal_id, options),
         ExecuteMsg::TransferOwnership { new_owner } => transfer::execute(deps, info, new_owner),
+        ExecuteMsg::OpenInterest(open_interest_msg) => {
+            open_interest::execute(deps, env, info, open_interest_msg)
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::{OUTSTANDING_DEBT, OWNER};
+    use crate::{
+        state::{OPEN_INTEREST, OUTSTANDING_DEBT, OWNER},
+        types::OpenInterest,
+    };
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
     use cosmwasm_std::{coins, Uint128};
 
@@ -227,5 +233,37 @@ mod tests {
         .unwrap_err();
 
         assert!(matches!(err, ContractError::OwnershipUnchanged {}));
+    }
+
+    #[test]
+    fn execute_open_interest_flows_through_module() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        OWNER
+            .save(deps.as_mut().storage, &owner)
+            .expect("owner stored");
+        OPEN_INTEREST
+            .save(deps.as_mut().storage, &None)
+            .expect("open interest defaults to none");
+
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&owner, &[]),
+            ExecuteMsg::OpenInterest(OpenInterest {
+                liquidity_coin: cosmwasm_std::Coin::new(0u128, "uusd"),
+                interest_coin: cosmwasm_std::Coin::new(5u128, "ujuno"),
+                expiry_duration: 86_400,
+                collateral: cosmwasm_std::Coin::new(200u128, "uatom"),
+            }),
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            err,
+            ContractError::InvalidCoinAmount {
+                field: "liquidity_coin"
+            }
+        ));
     }
 }
