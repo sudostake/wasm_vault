@@ -6,6 +6,7 @@ pub struct InfoResponse {
     pub message: String,
     pub owner: String,
     pub lender: Option<String>,
+    pub open_interest: Option<OpenInterest>,
 }
 
 #[cw_serde]
