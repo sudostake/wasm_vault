@@ -1,10 +1,10 @@
 use crate::types::OpenInterest;
-use cosmwasm_std::Addr;
+use cosmwasm_std::{Addr, Coin};
 use cw_storage_plus::Item;
 
 pub const OWNER: Item<Addr> = Item::new("owner");
 pub const LENDER: Item<Option<Addr>> = Item::new("lender");
-pub const OUTSTANDING_DEBT: Item<u128> = Item::new("outstanding_debt");
+pub const OUTSTANDING_DEBT: Item<Option<Coin>> = Item::new("outstanding_debt");
 pub const OPEN_INTEREST: Item<Option<OpenInterest>> = Item::new("open_interest");
 
 #[cfg(test)]
@@ -50,19 +50,30 @@ mod tests {
     }
 
     #[test]
-    fn outstanding_debt_item_handles_amount() {
+    fn outstanding_debt_item_handles_optional_coin() {
         let mut deps = mock_dependencies();
-        let amount = 50u128;
+        let denom = "ucosm";
+        let debt_coin = Coin::new(50u128, denom);
 
         OUTSTANDING_DEBT
-            .save(deps.as_mut().storage, &amount)
+            .save(deps.as_mut().storage, &Some(debt_coin.clone()))
             .expect("save succeeds");
 
         let loaded = OUTSTANDING_DEBT
             .load(deps.as_ref().storage)
             .expect("query succeeds");
 
-        assert_eq!(loaded, amount);
+        assert_eq!(loaded, Some(debt_coin));
+
+        OUTSTANDING_DEBT
+            .save(deps.as_mut().storage, &None)
+            .expect("clearing debt succeeds");
+
+        let cleared = OUTSTANDING_DEBT
+            .load(deps.as_ref().storage)
+            .expect("load succeeds");
+
+        assert!(cleared.is_none());
     }
 
     #[test]

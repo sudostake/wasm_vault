@@ -72,7 +72,7 @@ mod tests {
             .save(deps.as_mut().storage, &owner)
             .expect("owner stored");
         OUTSTANDING_DEBT
-            .save(deps.as_mut().storage, &0u128)
+            .save(deps.as_mut().storage, &None)
             .expect("zero debt stored");
 
         deps.querier.staking.update("ucosm", &[], &[]);
@@ -105,7 +105,7 @@ mod tests {
             .save(deps.as_mut().storage, &owner)
             .expect("owner stored");
         OUTSTANDING_DEBT
-            .save(deps.as_mut().storage, &0u128)
+            .save(deps.as_mut().storage, &None)
             .expect("zero debt stored");
 
         let validator = deps.api.addr_make("validator").into_string();
@@ -136,7 +136,7 @@ mod tests {
             .save(deps.as_mut().storage, &owner)
             .expect("owner stored");
         OUTSTANDING_DEBT
-            .save(deps.as_mut().storage, &0u128)
+            .save(deps.as_mut().storage, &None)
             .expect("zero debt stored");
 
         let src_validator = deps.api.addr_make("validator").into_string();
@@ -169,7 +169,7 @@ mod tests {
             .save(deps.as_mut().storage, &owner)
             .expect("owner stored");
         OUTSTANDING_DEBT
-            .save(deps.as_mut().storage, &0u128)
+            .save(deps.as_mut().storage, &None)
             .expect("zero debt stored");
 
         let env = mock_env();

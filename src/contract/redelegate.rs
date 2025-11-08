@@ -22,11 +22,8 @@ pub fn execute(
         return Err(ContractError::InvalidRedelegationAmount {});
     }
 
-    let debt = OUTSTANDING_DEBT.load(deps.storage)?;
-    if !Uint128::from(debt).is_zero() {
-        return Err(ContractError::OutstandingDebt {
-            amount: Uint128::from(debt),
-        });
+    if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
+        return Err(ContractError::OutstandingDebt { amount: debt });
     }
 
     let src_addr = deps.api.addr_validate(&src_validator)?.into_string();
@@ -87,7 +84,7 @@ mod tests {
     fn setup_owner_and_zero_debt(storage: &mut dyn Storage, owner: &Addr) {
         OWNER.save(storage, owner).expect("owner stored");
         OUTSTANDING_DEBT
-            .save(storage, &0u128)
+            .save(storage, &None)
             .expect("zero debt stored");
     }
 
@@ -137,7 +134,7 @@ mod tests {
         let owner = deps.api.addr_make("owner");
         setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
         OUTSTANDING_DEBT
-            .save(deps.as_mut().storage, &250u128)
+            .save(deps.as_mut().storage, &Some(Coin::new(250u128, "ucosm")))
             .expect("debt stored");
 
         let info = message_info(&owner, &[]);
@@ -153,7 +150,8 @@ mod tests {
 
         assert!(matches!(
             err,
-            ContractError::OutstandingDebt { amount } if amount == Uint128::new(250)
+            ContractError::OutstandingDebt { amount }
+                if amount == Coin::new(250u128, "ucosm")
         ));
     }
 

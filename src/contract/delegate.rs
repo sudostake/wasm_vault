@@ -25,11 +25,8 @@ pub fn execute(
     let denom = deps.querier.query_bonded_denom()?;
     let requested = Uint256::from(amount);
 
-    let debt = OUTSTANDING_DEBT.load(deps.storage)?;
-    if debt > 0 {
-        return Err(ContractError::OutstandingDebt {
-            amount: Uint128::from(debt),
-        });
+    if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
+        return Err(ContractError::OutstandingDebt { amount: debt });
     }
 
     let balance = deps
@@ -78,7 +75,7 @@ mod tests {
     fn setup_owner_and_zero_debt(storage: &mut dyn Storage, owner: &Addr) {
         OWNER.save(storage, owner).expect("owner stored");
         OUTSTANDING_DEBT
-            .save(storage, &0u128)
+            .save(storage, &None)
             .expect("zero debt stored");
     }
 
@@ -155,7 +152,7 @@ mod tests {
         setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
 
         OUTSTANDING_DEBT
-            .save(deps.as_mut().storage, &500u128)
+            .save(deps.as_mut().storage, &Some(Coin::new(500u128, "ucosm")))
             .expect("debt stored");
 
         let info = message_info(&owner, &[]);
@@ -163,9 +160,11 @@ mod tests {
         let err =
             execute(deps.as_mut(), mock_env(), info, validator, Uint128::new(50)).unwrap_err();
 
-        assert!(
-            matches!(err, ContractError::OutstandingDebt { amount } if amount == Uint128::new(500))
-        );
+        assert!(matches!(
+            err,
+            ContractError::OutstandingDebt { amount }
+                if amount == Coin::new(500u128, "ucosm")
+        ));
     }
 
     #[test]

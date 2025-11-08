@@ -70,7 +70,7 @@ mod tests {
         let owner = deps.api.addr_make("owner");
         setup_owner(deps.as_mut().storage, &owner);
         OUTSTANDING_DEBT
-            .save(deps.as_mut().storage, &0u128)
+            .save(deps.as_mut().storage, &None)
             .expect("zero debt stored");
 
         let env = mock_env();
