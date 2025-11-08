@@ -125,10 +125,7 @@ mod tests {
         deps.querier.staking.update("ucosm", &[], &[]);
 
         OUTSTANDING_DEBT
-            .save(
-                deps.as_mut().storage,
-                &Some(Coin::new(250u128, "ucosm")),
-            )
+            .save(deps.as_mut().storage, &Some(Coin::new(250u128, "ucosm")))
             .expect("debt stored");
 
         let err = execute(
@@ -240,10 +237,7 @@ mod tests {
         deps.querier.staking.update("ucosm", &[], &[]);
 
         OUTSTANDING_DEBT
-            .save(
-                deps.as_mut().storage,
-                &Some(Coin::new(999u128, "ucosm")),
-            )
+            .save(deps.as_mut().storage, &Some(Coin::new(999u128, "ucosm")))
             .expect("debt stored");
 
         let env = mock_env();

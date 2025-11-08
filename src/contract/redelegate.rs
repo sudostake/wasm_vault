@@ -134,10 +134,7 @@ mod tests {
         let owner = deps.api.addr_make("owner");
         setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
         OUTSTANDING_DEBT
-            .save(
-                deps.as_mut().storage,
-                &Some(Coin::new(250u128, "ucosm")),
-            )
+            .save(deps.as_mut().storage, &Some(Coin::new(250u128, "ucosm")))
             .expect("debt stored");
 
         let info = message_info(&owner, &[]);
