@@ -5,7 +5,7 @@ use cw2::set_contract_version;
 
 use crate::error::ContractError;
 use crate::msg::InstantiateMsg;
-use crate::state::{LENDER, OUTSTANDING_DEBT, OWNER};
+use crate::state::{LENDER, OPEN_INTEREST, OUTSTANDING_DEBT, OWNER};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:wasm_vault";
@@ -27,6 +27,7 @@ pub fn instantiate(
     OWNER.save(deps.storage, &owner)?;
     LENDER.save(deps.storage, &None)?;
     OUTSTANDING_DEBT.save(deps.storage, &0u128)?;
+    OPEN_INTEREST.save(deps.storage, &None)?;
 
     Ok(Response::new()
         .add_attribute("method", "instantiate")
@@ -66,6 +67,9 @@ mod tests {
 
         let debt = OUTSTANDING_DEBT.load(&deps.storage).unwrap();
         assert_eq!(debt, 0u128);
+
+        let stored_open_interest = OPEN_INTEREST.load(&deps.storage).unwrap();
+        assert_eq!(stored_open_interest, None);
     }
 
     #[test]
@@ -86,5 +90,8 @@ mod tests {
 
         let debt = OUTSTANDING_DEBT.load(&deps.storage).unwrap();
         assert_eq!(debt, 0u128);
+
+        let stored_open_interest = OPEN_INTEREST.load(&deps.storage).unwrap();
+        assert_eq!(stored_open_interest, None);
     }
 }
