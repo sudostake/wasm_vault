@@ -110,3 +110,58 @@ fn rejects_invalid_inputs() {
         "unexpected error: {err}"
     );
 }
+
+#[test]
+fn owner_can_close_pending_open_interest() {
+    let (mut app, contract_addr, owner) = instantiate_vault();
+
+    let msg = ExecuteMsg::OpenInterest(OpenInterest {
+        liquidity_coin: Coin::new(1_000u128, "uusd"),
+        interest_coin: Coin::new(50u128, "ujuno"),
+        expiry_duration: 86_400u64,
+        collateral: Coin::new(2_000u128, "uatom"),
+    });
+
+    app.execute_contract(owner.clone(), contract_addr.clone(), &msg, &[])
+        .expect("open interest succeeds");
+
+    let response = app
+        .execute_contract(
+            owner.clone(),
+            contract_addr.clone(),
+            &ExecuteMsg::CloseOpenInterest {},
+            &[],
+        )
+        .expect("close succeeds");
+
+    assert!(response.events.iter().any(|event| {
+        event.ty == "wasm"
+            && event
+                .attributes
+                .iter()
+                .any(|attr| attr.key == "action" && attr.value == "close_open_interest")
+    }));
+
+    let info: InfoResponse = app
+        .wrap()
+        .query_wasm_smart(contract_addr.clone(), &QueryMsg::Info)
+        .expect("info query succeeds");
+
+    assert!(info.open_interest.is_none());
+}
+
+#[test]
+fn cannot_close_without_active_open_interest() {
+    let (mut app, contract_addr, owner) = instantiate_vault();
+
+    let err = app
+        .execute_contract(
+            owner.clone(),
+            contract_addr.clone(),
+            &ExecuteMsg::CloseOpenInterest {},
+            &[],
+        )
+        .unwrap_err();
+
+    assert!(err.to_string().contains("No open interest"));
+}

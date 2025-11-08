@@ -56,6 +56,12 @@ pub enum ContractError {
     #[error("An open interest is already active")]
     OpenInterestAlreadyExists {},
 
+    #[error("No open interest is currently active")]
+    NoOpenInterest {},
+
+    #[error("A lender has already been set")]
+    LenderAlreadySet {},
+
     #[error("{field} amount must be greater than zero")]
     InvalidCoinAmount { field: &'static str },
 
