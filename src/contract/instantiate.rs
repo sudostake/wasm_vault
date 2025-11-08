@@ -26,7 +26,7 @@ pub fn instantiate(
     };
     OWNER.save(deps.storage, &owner)?;
     LENDER.save(deps.storage, &None)?;
-    OUTSTANDING_DEBT.save(deps.storage, &0u128)?;
+    OUTSTANDING_DEBT.save(deps.storage, &None)?;
     OPEN_INTEREST.save(deps.storage, &None)?;
 
     Ok(Response::new()
@@ -66,7 +66,7 @@ mod tests {
         assert_eq!(saved_lender, None);
 
         let debt = OUTSTANDING_DEBT.load(&deps.storage).unwrap();
-        assert_eq!(debt, 0u128);
+        assert_eq!(debt, None);
 
         let stored_open_interest = OPEN_INTEREST.load(&deps.storage).unwrap();
         assert_eq!(stored_open_interest, None);
@@ -89,7 +89,7 @@ mod tests {
         assert_eq!(saved_lender, None);
 
         let debt = OUTSTANDING_DEBT.load(&deps.storage).unwrap();
-        assert_eq!(debt, 0u128);
+        assert_eq!(debt, None);
 
         let stored_open_interest = OPEN_INTEREST.load(&deps.storage).unwrap();
         assert_eq!(stored_open_interest, None);

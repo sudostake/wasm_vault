@@ -24,11 +24,8 @@ pub fn execute(
 
     let bonded_denom = deps.querier.query_bonded_denom()?;
     if denom == bonded_denom {
-        let debt = OUTSTANDING_DEBT.load(deps.storage)?;
-        if debt > 0 {
-            return Err(ContractError::OutstandingDebt {
-                amount: Uint128::from(debt),
-            });
+        if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
+            return Err(ContractError::OutstandingDebt { amount: debt });
         }
     }
 
@@ -72,12 +69,12 @@ mod tests {
     use super::*;
     use crate::state::OUTSTANDING_DEBT;
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
-    use cosmwasm_std::{coins, Addr, Storage};
+    use cosmwasm_std::{coins, Addr, Coin, Storage};
 
     fn setup_owner_and_zero_debt(storage: &mut dyn Storage, owner: &Addr) {
         OWNER.save(storage, owner).expect("owner stored");
         OUTSTANDING_DEBT
-            .save(storage, &0u128)
+            .save(storage, &None)
             .expect("zero debt stored");
     }
 
@@ -128,7 +125,10 @@ mod tests {
         deps.querier.staking.update("ucosm", &[], &[]);
 
         OUTSTANDING_DEBT
-            .save(deps.as_mut().storage, &250u128)
+            .save(
+                deps.as_mut().storage,
+                &Some(Coin::new(250u128, "ucosm")),
+            )
             .expect("debt stored");
 
         let err = execute(
@@ -143,7 +143,8 @@ mod tests {
 
         assert!(matches!(
             err,
-            ContractError::OutstandingDebt { amount } if amount == Uint128::new(250)
+            ContractError::OutstandingDebt { amount }
+                if amount == Coin::new(250u128, "ucosm")
         ));
     }
 
@@ -239,7 +240,10 @@ mod tests {
         deps.querier.staking.update("ucosm", &[], &[]);
 
         OUTSTANDING_DEBT
-            .save(deps.as_mut().storage, &999u128)
+            .save(
+                deps.as_mut().storage,
+                &Some(Coin::new(999u128, "ucosm")),
+            )
             .expect("debt stored");
 
         let env = mock_env();

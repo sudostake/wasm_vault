@@ -62,7 +62,7 @@ mod tests {
     fn setup_owner_and_zero_debt(storage: &mut dyn Storage, owner: &Addr) {
         OWNER.save(storage, owner).expect("owner stored");
         OUTSTANDING_DEBT
-            .save(storage, &0u128)
+            .save(storage, &None)
             .expect("zero debt stored");
     }
 
@@ -226,7 +226,10 @@ mod tests {
         setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
 
         OUTSTANDING_DEBT
-            .save(deps.as_mut().storage, &750u128)
+            .save(
+                deps.as_mut().storage,
+                &Some(Coin::new(750u128, "ucosm")),
+            )
             .expect("debt stored");
 
         let env = mock_env();
