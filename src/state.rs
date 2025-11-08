@@ -46,7 +46,7 @@ mod tests {
             .may_load(fresh_deps.as_ref().storage)
             .expect("may_load succeeds");
 
-        assert!(missing.is_none());
+        assert_eq!(missing, None);
     }
 
     #[test]
