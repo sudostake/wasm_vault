@@ -2,6 +2,7 @@ mod claim;
 mod delegate;
 mod execute;
 mod instantiate;
+mod open_interest;
 mod query;
 mod redelegate;
 mod transfer;

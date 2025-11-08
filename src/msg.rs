@@ -1,4 +1,5 @@
 pub use crate::types::InfoResponse;
+use crate::types::OpenInterest;
 use cosmwasm_schema::{cw_serde, QueryResponses};
 use cosmwasm_std::{Uint128, VoteOption, WeightedVoteOption};
 
@@ -40,6 +41,7 @@ pub enum ExecuteMsg {
     TransferOwnership {
         new_owner: String,
     },
+    OpenInterest(OpenInterest),
 }
 
 #[cw_serde]

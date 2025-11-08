@@ -1,6 +1,7 @@
 mod test_claim_rewards;
 mod test_delegate;
 mod test_instantiate;
+mod test_open_interest;
 mod test_redelegate;
 mod test_transfer;
 mod test_undelegate;

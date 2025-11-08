@@ -52,4 +52,16 @@ pub enum ContractError {
 
     #[error("No delegations found to claim rewards from")]
     NoDelegations {},
+
+    #[error("An open interest is already active")]
+    OpenInterestAlreadyExists {},
+
+    #[error("{field} amount must be greater than zero")]
+    InvalidCoinAmount { field: &'static str },
+
+    #[error("{field} denom must not be empty")]
+    InvalidCoinDenom { field: &'static str },
+
+    #[error("Expiry duration must be greater than zero seconds")]
+    InvalidExpiryDuration {},
 }
