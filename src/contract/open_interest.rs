@@ -1,7 +1,7 @@
 use cosmwasm_std::{attr, Coin, DepsMut, Env, MessageInfo, Response};
 
 use crate::{
-    state::{OPEN_INTEREST, OWNER},
+    state::{LENDER, OPEN_INTEREST, OWNER},
     types::OpenInterest,
     ContractError,
 };
@@ -49,6 +49,45 @@ pub fn execute(
     ]))
 }
 
+pub fn close(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError> {
+    let owner = OWNER.load(deps.storage)?;
+    if info.sender != owner {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    if LENDER.load(deps.storage)?.is_some() {
+        return Err(ContractError::LenderAlreadySet {});
+    }
+
+    let open_interest = OPEN_INTEREST
+        .load(deps.storage)?
+        .ok_or(ContractError::NoOpenInterest {})?;
+
+    OPEN_INTEREST.save(deps.storage, &None)?;
+
+    Ok(Response::new().add_attributes([
+        attr("action", "close_open_interest"),
+        attr(
+            "liquidity_denom",
+            open_interest.liquidity_coin.denom.clone(),
+        ),
+        attr(
+            "liquidity_amount",
+            open_interest.liquidity_coin.amount.to_string(),
+        ),
+        attr("interest_denom", open_interest.interest_coin.denom.clone()),
+        attr(
+            "interest_amount",
+            open_interest.interest_coin.amount.to_string(),
+        ),
+        attr("collateral_denom", open_interest.collateral.denom.clone()),
+        attr(
+            "collateral_amount",
+            open_interest.collateral.amount.to_string(),
+        ),
+    ]))
+}
+
 fn validate_open_interest(open_interest: &OpenInterest) -> Result<(), ContractError> {
     validate_coin(&open_interest.liquidity_coin, "liquidity_coin")?;
     validate_coin(&open_interest.interest_coin, "interest_coin")?;
@@ -77,12 +116,14 @@ fn validate_coin(coin: &Coin, field: &'static str) -> Result<(), ContractError> 
 mod tests {
     use super::*;
     use cosmwasm_std::{
+        attr,
         testing::{message_info, mock_dependencies, mock_env},
         Addr,
     };
 
     fn setup(deps: DepsMut, owner: &Addr) {
         OWNER.save(deps.storage, owner).expect("owner stored");
+        LENDER.save(deps.storage, &None).expect("lender cleared");
         OPEN_INTEREST
             .save(deps.storage, &None)
             .expect("open interest cleared");
@@ -264,5 +305,86 @@ mod tests {
             .expect("interest fetched");
 
         assert_eq!(stored, Some(request));
+    }
+
+    #[test]
+    fn close_rejects_non_owner_senders() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        setup(deps.as_mut(), &owner);
+        let intruder = deps.api.addr_make("intruder");
+
+        let err = close(deps.as_mut(), message_info(&intruder, &[])).unwrap_err();
+
+        assert!(matches!(err, ContractError::Unauthorized {}));
+    }
+
+    #[test]
+    fn close_requires_active_open_interest() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        setup(deps.as_mut(), &owner);
+
+        let err = close(deps.as_mut(), message_info(&owner, &[])).unwrap_err();
+
+        assert!(matches!(err, ContractError::NoOpenInterest {}));
+    }
+
+    #[test]
+    fn close_rejects_when_lender_present() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        setup(deps.as_mut(), &owner);
+
+        let request = build_open_interest(
+            sample_coin(100, "uusd"),
+            sample_coin(5, "ujuno"),
+            86_400,
+            sample_coin(200, "uatom"),
+        );
+
+        OPEN_INTEREST
+            .save(deps.as_mut().storage, &Some(request))
+            .expect("open interest stored");
+        let lender = deps.api.addr_make("lender");
+        LENDER
+            .save(deps.as_mut().storage, &Some(lender))
+            .expect("lender stored");
+
+        let err = close(deps.as_mut(), message_info(&owner, &[])).unwrap_err();
+
+        assert!(matches!(err, ContractError::LenderAlreadySet {}));
+    }
+
+    #[test]
+    fn close_clears_open_interest_and_emits_attributes() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        setup(deps.as_mut(), &owner);
+
+        let request = build_open_interest(
+            sample_coin(100, "uusd"),
+            sample_coin(5, "ujuno"),
+            86_400,
+            sample_coin(200, "uatom"),
+        );
+
+        OPEN_INTEREST
+            .save(deps.as_mut().storage, &Some(request.clone()))
+            .expect("open interest stored");
+
+        let response = close(deps.as_mut(), message_info(&owner, &[])).expect("close succeeds");
+
+        assert!(response.messages.is_empty());
+        assert_eq!(
+            response.attributes[0],
+            attr("action", "close_open_interest")
+        );
+
+        let stored = OPEN_INTEREST
+            .load(deps.as_ref().storage)
+            .expect("open interest fetched");
+
+        assert!(stored.is_none());
     }
 }

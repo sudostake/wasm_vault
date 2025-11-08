@@ -44,6 +44,7 @@ pub fn execute(
         ExecuteMsg::OpenInterest(open_interest_msg) => {
             open_interest::execute(deps, env, info, open_interest_msg)
         }
+        ExecuteMsg::CloseOpenInterest {} => open_interest::close(deps, info),
     }
 }
 
@@ -51,7 +52,7 @@ pub fn execute(
 mod tests {
     use super::*;
     use crate::{
-        state::{OPEN_INTEREST, OUTSTANDING_DEBT, OWNER},
+        state::{LENDER, OPEN_INTEREST, OUTSTANDING_DEBT, OWNER},
         types::OpenInterest,
     };
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
@@ -265,5 +266,39 @@ mod tests {
                 field: "liquidity_coin"
             }
         ));
+    }
+
+    #[test]
+    fn execute_close_open_interest_flows_through_module() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        OWNER
+            .save(deps.as_mut().storage, &owner)
+            .expect("owner stored");
+        LENDER
+            .save(deps.as_mut().storage, &None)
+            .expect("lender defaults to none");
+        let open_interest = OpenInterest {
+            liquidity_coin: cosmwasm_std::Coin::new(1u128, "uusd"),
+            interest_coin: cosmwasm_std::Coin::new(1u128, "ujuno"),
+            expiry_duration: 100,
+            collateral: cosmwasm_std::Coin::new(2u128, "uatom"),
+        };
+        OPEN_INTEREST
+            .save(deps.as_mut().storage, &Some(open_interest))
+            .expect("open interest stored");
+
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&owner, &[]),
+            ExecuteMsg::CloseOpenInterest {},
+        )
+        .expect("close succeeds");
+
+        let stored = OPEN_INTEREST
+            .load(deps.as_ref().storage)
+            .expect("state loaded");
+        assert!(stored.is_none());
     }
 }
