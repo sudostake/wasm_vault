@@ -22,10 +22,6 @@ pub fn execute(
         return Err(ContractError::InvalidRedelegationAmount {});
     }
 
-    if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
-        return Err(ContractError::OutstandingDebt { amount: debt });
-    }
-
     let src_addr = deps.api.addr_validate(&src_validator)?.into_string();
     let dst_addr = deps.api.addr_validate(&dst_validator)?.into_string();
 
@@ -34,6 +30,13 @@ pub fn execute(
     }
 
     let denom = deps.querier.query_bonded_denom()?;
+
+    if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
+        if debt.denom == denom {
+            return Err(ContractError::OutstandingDebt { amount: debt });
+        }
+    }
+
     let requested = Uint256::from(amount);
 
     let delegation = deps
@@ -129,30 +132,110 @@ mod tests {
     }
 
     #[test]
-    fn fails_when_outstanding_debt_exists() {
+    fn fails_when_outstanding_debt_matches_bonded_denom() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
         setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
+        let bonded_denom = deps
+            .as_ref()
+            .querier
+            .query_bonded_denom()
+            .expect("bonded denom available");
         OUTSTANDING_DEBT
-            .save(deps.as_mut().storage, &Some(Coin::new(250u128, "ucosm")))
+            .save(
+                deps.as_mut().storage,
+                &Some(Coin::new(250u128, bonded_denom.clone())),
+            )
             .expect("debt stored");
+        deps.querier
+            .staking
+            .update(bonded_denom.as_str(), &[], &[]);
 
         let info = message_info(&owner, &[]);
+        let src_validator = deps.api.addr_make("validator").into_string();
+        let dst_validator = deps.api.addr_make("validator-two").into_string();
         let err = execute(
             deps.as_mut(),
             mock_env(),
             info,
-            "validator".to_string(),
-            "validator-two".to_string(),
+            src_validator.clone(),
+            dst_validator,
             Uint128::new(10),
         )
         .unwrap_err();
 
-        assert!(matches!(
-            err,
-            ContractError::OutstandingDebt { amount }
-                if amount == Coin::new(250u128, "ucosm")
-        ));
+        match err {
+            ContractError::OutstandingDebt { amount } => {
+                assert_eq!(amount, Coin::new(250u128, bonded_denom));
+            }
+            other => panic!("unexpected error: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn allows_redelegation_when_outstanding_debt_is_other_denom() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
+        let bonded_denom = deps
+            .as_ref()
+            .querier
+            .query_bonded_denom()
+            .expect("bonded denom available");
+        let other_denom = format!("{bonded_denom}_alt");
+        OUTSTANDING_DEBT
+            .save(
+                deps.as_mut().storage,
+                &Some(Coin::new(250u128, other_denom)),
+            )
+            .expect("debt stored");
+
+        let env = mock_env();
+        let contract_addr = env.contract.address.clone();
+        let src_validator_addr = deps.api.addr_make("validator").into_string();
+        let dst_validator_addr = deps.api.addr_make("validator-two").into_string();
+
+        let delegation = FullDelegation::create(
+            contract_addr,
+            src_validator_addr.clone(),
+            Coin::new(300u128, bonded_denom.clone()),
+            Coin::new(300u128, bonded_denom.clone()),
+            vec![],
+        );
+
+        let src_validator_obj = Validator::create(
+            src_validator_addr.clone(),
+            Decimal::percent(5),
+            Decimal::percent(10),
+            Decimal::percent(1),
+        );
+        let dst_validator_obj = Validator::create(
+            dst_validator_addr.clone(),
+            Decimal::percent(4),
+            Decimal::percent(9),
+            Decimal::percent(1),
+        );
+
+        deps.querier.staking.update(
+            bonded_denom.as_str(),
+            &[src_validator_obj, dst_validator_obj],
+            &[delegation],
+        );
+
+        let info = message_info(&owner, &[]);
+        let amount = Uint128::new(50);
+
+        let response = execute(
+            deps.as_mut(),
+            env,
+            info,
+            src_validator_addr.clone(),
+            dst_validator_addr.clone(),
+            amount,
+        )
+        .expect("redelegation succeeds");
+
+        assert_eq!(response.messages.len(), 1);
     }
 
     #[test]
