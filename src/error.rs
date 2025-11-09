@@ -90,6 +90,12 @@ pub enum ContractError {
     #[error("Counter offers are full; liquidity must be greater than {minimum} {denom}")]
     CounterOfferNotCompetitive { minimum: Uint256, denom: String },
 
+    #[error("Counter offer from {proposer} not found")]
+    CounterOfferNotFound { proposer: String },
+
+    #[error("Counter offer payload for {proposer} does not match stored terms")]
+    CounterOfferMismatch { proposer: String },
+
     #[error("Cannot undelegate while an open interest is active")]
     UndelegateWhileOpenInterestActive {},
 }

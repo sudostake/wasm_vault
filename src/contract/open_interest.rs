@@ -590,7 +590,7 @@ mod tests {
             })
             .collect::<Vec<_>>();
 
-        recipients.sort_by(|a, b| a.0.cmp(&b.0));
+        recipients.sort_by(|a, b| a.0.cmp(b.0));
 
         let mut expected = vec![
             (
@@ -602,7 +602,7 @@ mod tests {
                 std::slice::from_ref(&offer_b.liquidity_coin),
             ),
         ];
-        expected.sort_by(|a, b| a.0.cmp(&b.0));
+        expected.sort_by(|a, b| a.0.cmp(b.0));
 
         assert_eq!(recipients, expected);
 
