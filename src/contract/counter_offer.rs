@@ -901,7 +901,7 @@ mod tests {
                 other => panic!("unexpected message: {:?}", other),
             })
             .collect();
-        payouts.sort_by(|a, b| a.0.cmp(b.0));
+        payouts.sort_by(|a, b| a.0.cmp(&b.0));
 
         let rival_str = rival.to_string();
 
