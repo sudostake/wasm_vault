@@ -48,6 +48,7 @@ pub enum ExecuteMsg {
         proposer: String,
         open_interest: OpenInterest,
     },
+    CancelCounterOffer {},
     CloseOpenInterest {},
 }
 
