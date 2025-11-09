@@ -136,15 +136,11 @@ fn refund_counter_offer_escrow(storage: &mut dyn Storage) -> StdResult<Vec<BankM
     Ok(refunds)
 }
 
-fn clear_outstanding_debt(storage: &mut dyn Storage) -> StdResult<()> {
-    OUTSTANDING_DEBT.save(storage, &None)
-}
-
 fn clear_counter_offers_and_debt(
     storage: &mut dyn Storage,
     offers: &[(Addr, OpenInterest)],
 ) -> StdResult<()> {
-    clear_outstanding_debt(storage)?;
+    OUTSTANDING_DEBT.save(storage, &None)?;
     for (addr, _) in offers {
         COUNTER_OFFERS.remove(storage, addr);
     }
