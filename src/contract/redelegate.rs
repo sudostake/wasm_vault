@@ -147,9 +147,7 @@ mod tests {
                 &Some(Coin::new(250u128, bonded_denom.clone())),
             )
             .expect("debt stored");
-        deps.querier
-            .staking
-            .update(bonded_denom.as_str(), &[], &[]);
+        deps.querier.staking.update(bonded_denom.as_str(), &[], &[]);
 
         let info = message_info(&owner, &[]);
         let src_validator = deps.api.addr_make("validator").into_string();
