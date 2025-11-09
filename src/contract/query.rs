@@ -3,7 +3,7 @@ use cosmwasm_std::entry_point;
 use cosmwasm_std::{to_json_binary, Deps, Env, QueryResponse, StdResult};
 
 use crate::msg::QueryMsg;
-use crate::state::{LENDER, OPEN_INTEREST, OWNER};
+use crate::state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OWNER};
 use crate::types::InfoResponse;
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -17,12 +17,14 @@ fn query_info(deps: Deps) -> StdResult<QueryResponse> {
     let owner = OWNER.load(deps.storage)?;
     let lender = LENDER.load(deps.storage)?;
     let open_interest = OPEN_INTEREST.load(deps.storage)?;
+    let counter_offers = COUNTER_OFFERS.load(deps.storage)?;
 
     let response = InfoResponse {
         message: "wasm_vault".to_string(),
         owner: owner.into_string(),
         lender: lender.map(|addr| addr.into_string()),
         open_interest,
+        counter_offers,
     };
 
     to_json_binary(&response)
@@ -31,7 +33,8 @@ fn query_info(deps: Deps) -> StdResult<QueryResponse> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::OpenInterest;
+    use crate::state::COUNTER_OFFERS;
+    use crate::types::{CounterOffer, OpenInterest};
     use cosmwasm_std::{
         testing::{mock_dependencies, mock_env},
         Coin,
@@ -60,6 +63,14 @@ mod tests {
         OPEN_INTEREST
             .save(deps.as_mut().storage, &Some(open_interest.clone()))
             .expect("open interest saved");
+        COUNTER_OFFERS
+            .save(
+                deps.as_mut().storage,
+                &Some(vec![CounterOffer {
+                    open_interest: open_interest.clone(),
+                }]),
+            )
+            .expect("counter offer saved");
 
         let response = query(deps.as_ref(), mock_env(), QueryMsg::Info).expect("query succeeds");
 
@@ -69,6 +80,7 @@ mod tests {
         assert_eq!(info.owner, owner.into_string());
         assert_eq!(info.lender, Some(lender.into_string()));
         assert_eq!(info.open_interest, Some(open_interest));
+        assert!(info.counter_offers.is_some());
     }
 
     #[test]
@@ -86,6 +98,9 @@ mod tests {
         OPEN_INTEREST
             .save(deps.as_mut().storage, &None)
             .expect("open interest defaults to none");
+        COUNTER_OFFERS
+            .save(deps.as_mut().storage, &None)
+            .expect("counter offers default to none");
 
         let response = query(deps.as_ref(), mock_env(), QueryMsg::Info).expect("query succeeds");
 
@@ -95,6 +110,7 @@ mod tests {
         assert_eq!(info.owner, owner.into_string());
         assert_eq!(info.lender, None);
         assert_eq!(info.open_interest, None);
+        assert!(info.counter_offers.is_none());
     }
 
     #[test]

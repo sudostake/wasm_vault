@@ -7,6 +7,7 @@ pub struct InfoResponse {
     pub owner: String,
     pub lender: Option<String>,
     pub open_interest: Option<OpenInterest>,
+    pub counter_offers: Option<Vec<CounterOffer>>,
 }
 
 #[cw_serde]
@@ -19,4 +20,10 @@ pub struct OpenInterest {
     pub expiry_duration: u64,
     /// Collateral provided to secure the open interest.
     pub collateral: Coin,
+}
+
+#[cw_serde]
+pub struct CounterOffer {
+    /// Proposed open interest terms. Only the amount should deviate.
+    pub open_interest: OpenInterest,
 }
