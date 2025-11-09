@@ -1,6 +1,9 @@
 use cosmwasm_std::{attr, Coin, DepsMut, Env, MessageInfo, Response, StakingMsg, Uint128, Uint256};
 
-use crate::{state::OWNER, ContractError};
+use crate::{
+    state::{OPEN_INTEREST, OWNER},
+    ContractError,
+};
 
 pub fn execute(
     deps: DepsMut,
@@ -16,6 +19,10 @@ pub fn execute(
 
     if amount.is_zero() {
         return Err(ContractError::InvalidUndelegationAmount {});
+    }
+
+    if OPEN_INTEREST.load(deps.storage)?.is_some() {
+        return Err(ContractError::UndelegateWhileOpenInterestActive {});
     }
 
     let validator_addr = deps.api.addr_validate(&validator)?.into_string();
@@ -55,7 +62,10 @@ pub fn execute(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::OUTSTANDING_DEBT;
+    use crate::{
+        state::{OPEN_INTEREST, OUTSTANDING_DEBT},
+        types::OpenInterest,
+    };
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
     use cosmwasm_std::{Addr, Coin, Decimal, FullDelegation, Storage, Uint128, Uint256, Validator};
 
@@ -64,6 +74,9 @@ mod tests {
         OUTSTANDING_DEBT
             .save(storage, &None)
             .expect("zero debt stored");
+        OPEN_INTEREST
+            .save(storage, &None)
+            .expect("no open interest stored");
     }
 
     #[test]
@@ -166,6 +179,34 @@ mod tests {
                 delegated,
                 requested,
             } if validator == validator_addr && delegated == Uint256::from(75u128) && requested == Uint256::from(100u128)
+        ));
+    }
+
+    #[test]
+    fn fails_when_open_interest_active() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
+
+        let active_interest = OpenInterest {
+            liquidity_coin: Coin::new(100u128, "ucosm"),
+            interest_coin: Coin::new(10u128, "ucosm"),
+            expiry_duration: 86_400u64,
+            collateral: Coin::new(150u128, "uatom"),
+        };
+
+        OPEN_INTEREST
+            .save(deps.as_mut().storage, &Some(active_interest))
+            .expect("open interest stored");
+
+        let info = message_info(&owner, &[]);
+        let validator = deps.api.addr_make("validator").into_string();
+        let err =
+            execute(deps.as_mut(), mock_env(), info, validator, Uint128::new(10)).unwrap_err();
+
+        assert!(matches!(
+            err,
+            ContractError::UndelegateWhileOpenInterestActive {}
         ));
     }
 

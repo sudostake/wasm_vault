@@ -86,6 +86,9 @@ mod tests {
         OUTSTANDING_DEBT
             .save(deps.as_mut().storage, &None)
             .expect("zero debt stored");
+        OPEN_INTEREST
+            .save(deps.as_mut().storage, &None)
+            .expect("no open interest stored");
 
         deps.querier.staking.update("ucosm", &[], &[]);
         deps.querier
@@ -119,6 +122,9 @@ mod tests {
         OUTSTANDING_DEBT
             .save(deps.as_mut().storage, &None)
             .expect("zero debt stored");
+        OPEN_INTEREST
+            .save(deps.as_mut().storage, &None)
+            .expect("no open interest stored");
 
         let validator = deps.api.addr_make("validator").into_string();
         let env = mock_env();
@@ -150,6 +156,9 @@ mod tests {
         OUTSTANDING_DEBT
             .save(deps.as_mut().storage, &None)
             .expect("zero debt stored");
+        OPEN_INTEREST
+            .save(deps.as_mut().storage, &None)
+            .expect("no open interest stored");
 
         let src_validator = deps.api.addr_make("validator").into_string();
         let dst_validator = deps.api.addr_make("validator-two").into_string();
@@ -183,6 +192,9 @@ mod tests {
         OUTSTANDING_DEBT
             .save(deps.as_mut().storage, &None)
             .expect("zero debt stored");
+        OPEN_INTEREST
+            .save(deps.as_mut().storage, &None)
+            .expect("no open interest stored");
 
         let env = mock_env();
         let err = execute(

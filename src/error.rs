@@ -86,4 +86,7 @@ pub enum ContractError {
 
     #[error("Proposer already has an active counter offer")]
     CounterOfferAlreadyExists {},
+
+    #[error("Cannot undelegate while an open interest is active")]
+    UndelegateWhileOpenInterestActive {},
 }
