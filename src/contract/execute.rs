@@ -49,6 +49,10 @@ pub fn execute(
         ExecuteMsg::ProposeCounterOffer(open_interest) => {
             counter_offer::propose(deps, env, info, open_interest)
         }
+        ExecuteMsg::AcceptCounterOffer {
+            proposer,
+            open_interest,
+        } => counter_offer::accept(deps, env, info, proposer, open_interest),
         ExecuteMsg::CloseOpenInterest {} => open_interest::close(deps, info),
     }
 }

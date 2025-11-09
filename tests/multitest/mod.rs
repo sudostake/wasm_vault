@@ -1,4 +1,5 @@
 mod test_claim_rewards;
+mod test_counter_offer;
 mod test_delegate;
 mod test_instantiate;
 mod test_open_interest;
