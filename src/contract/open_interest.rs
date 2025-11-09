@@ -95,13 +95,22 @@ pub fn close(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError
     Ok(response.add_messages(refund_msgs))
 }
 
-pub fn fund(deps: DepsMut, _env: Env, info: MessageInfo) -> Result<Response, ContractError> {
+pub fn fund(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    expected_interest: OpenInterest,
+) -> Result<Response, ContractError> {
     let open_interest = OPEN_INTEREST
         .load(deps.storage)?
         .ok_or(ContractError::NoOpenInterest {})?;
 
     if LENDER.load(deps.storage)?.is_some() {
         return Err(ContractError::LenderAlreadySet {});
+    }
+
+    if open_interest != expected_interest {
+        return Err(ContractError::OpenInterestMismatch {});
     }
 
     validate_liquidity_funding(&info, &open_interest.liquidity_coin)?;
@@ -429,7 +438,7 @@ mod tests {
         );
 
         OPEN_INTEREST
-            .save(deps.as_mut().storage, &Some(request))
+            .save(deps.as_mut().storage, &Some(request.clone()))
             .expect("open interest stored");
         let lender = deps.api.addr_make("lender");
         LENDER
@@ -675,10 +684,17 @@ mod tests {
         setup(deps.as_mut(), &owner);
 
         let lender = deps.api.addr_make("lender");
+        let expected_interest = build_open_interest(
+            sample_coin(100, "uusd"),
+            sample_coin(5, "ujuno"),
+            86_400,
+            sample_coin(200, "uatom"),
+        );
         let err = fund(
             deps.as_mut(),
             mock_env(),
             message_info(&lender, &[Coin::new(100u128, "uusd")]),
+            expected_interest.clone(),
         )
         .unwrap_err();
 
@@ -698,7 +714,7 @@ mod tests {
             sample_coin(200, "uatom"),
         );
         OPEN_INTEREST
-            .save(deps.as_mut().storage, &Some(request))
+            .save(deps.as_mut().storage, &Some(request.clone()))
             .expect("open interest stored");
         let existing_lender = deps.api.addr_make("existing");
         LENDER
@@ -710,6 +726,7 @@ mod tests {
             deps.as_mut(),
             mock_env(),
             message_info(&new_lender, &[Coin::new(100u128, "uusd")]),
+            request.clone(),
         )
         .unwrap_err();
 
@@ -747,6 +764,7 @@ mod tests {
                     &request.liquidity_coin.denom,
                 )],
             ),
+            request.clone(),
         )
         .unwrap_err();
 
@@ -754,6 +772,41 @@ mod tests {
             err,
             ContractError::OpenInterestFundingMismatch { .. }
         ));
+    }
+
+    #[test]
+    fn fund_rejects_mismatched_open_interest() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        setup(deps.as_mut(), &owner);
+
+        let request = build_open_interest(
+            sample_coin(100, "uusd"),
+            sample_coin(5, "ujuno"),
+            86_400,
+            sample_coin(200, "uatom"),
+        );
+        OPEN_INTEREST
+            .save(deps.as_mut().storage, &Some(request.clone()))
+            .expect("open interest stored");
+
+        let mut mismatched_interest = request.clone();
+        mismatched_interest.liquidity_coin.amount = mismatched_interest
+            .liquidity_coin
+            .amount
+            .checked_sub(Uint256::from(1u128))
+            .expect("amount stays positive");
+
+        let lender = deps.api.addr_make("lender");
+        let err = fund(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&lender, &[request.liquidity_coin.clone()]),
+            mismatched_interest,
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ContractError::OpenInterestMismatch {}));
     }
 
     #[test]
@@ -803,6 +856,7 @@ mod tests {
             deps.as_mut(),
             mock_env(),
             message_info(&lender, &[request.liquidity_coin.clone()]),
+            request.clone(),
         )
         .expect("fund succeeds");
 

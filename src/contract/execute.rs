@@ -46,7 +46,9 @@ pub fn execute(
         ExecuteMsg::OpenInterest(open_interest_msg) => {
             open_interest::execute(deps, env, info, open_interest_msg)
         }
-        ExecuteMsg::FundOpenInterest {} => open_interest::fund(deps, env, info),
+        ExecuteMsg::FundOpenInterest(expected_interest) => {
+            open_interest::fund(deps, env, info, expected_interest)
+        }
         ExecuteMsg::ProposeCounterOffer(open_interest) => {
             counter_offer::propose(deps, env, info, open_interest)
         }

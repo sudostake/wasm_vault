@@ -239,7 +239,7 @@ fn lender_can_fund_open_interest_and_refund_counter_offers() {
         .execute_contract(
             lender.clone(),
             contract_addr.clone(),
-            &ExecuteMsg::FundOpenInterest {},
+            &ExecuteMsg::FundOpenInterest(open_interest.clone()),
             &[open_interest.liquidity_coin.clone()],
         )
         .expect("funding succeeds");
