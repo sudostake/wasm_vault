@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    attr, BankMsg, Coin, DepsMut, Env, MessageInfo, Order, Response, StdResult, Storage,
+    attr, Addr, BankMsg, Coin, DepsMut, Env, MessageInfo, Order, Response, StdResult, Storage,
 };
 
 use crate::{
@@ -119,28 +119,36 @@ fn validate_coin(coin: &Coin, field: &'static str) -> Result<(), ContractError> 
 }
 
 fn refund_counter_offer_escrow(storage: &mut dyn Storage) -> StdResult<Vec<BankMsg>> {
-    // Gather all refunds first; we only mutate storage after this succeeds so failed collection
-    // leaves both COUNTER_OFFERS and OUTSTANDING_DEBT untouched. We intentionally clear debt before
-    // wiping counter offers: if persistence fails mid-way, it's safer to have lingering offers with
-    // debt still recorded than the reverse scenario.
-    let refunds = COUNTER_OFFERS
+    let offers = COUNTER_OFFERS
         .range(storage, None, None, Order::Ascending)
-        .map(|entry| {
-            entry.map(|(addr, offer)| BankMsg::Send {
-                to_address: addr.into_string(),
-                amount: vec![offer.liquidity_coin.clone()],
-            })
-        })
-        .collect::<StdResult<Vec<_>>>()?;
+        .collect::<StdResult<Vec<(Addr, OpenInterest)>>>()?;
 
-    clear_outstanding_debt(storage)?;
-    COUNTER_OFFERS.clear(storage);
+    let refunds = offers
+        .iter()
+        .map(|(addr, offer)| BankMsg::Send {
+            to_address: addr.to_string(),
+            amount: vec![offer.liquidity_coin.clone()],
+        })
+        .collect::<Vec<_>>();
+
+    clear_counter_offers_and_debt(storage, &offers)?;
 
     Ok(refunds)
 }
 
 fn clear_outstanding_debt(storage: &mut dyn Storage) -> StdResult<()> {
     OUTSTANDING_DEBT.save(storage, &None)
+}
+
+fn clear_counter_offers_and_debt(
+    storage: &mut dyn Storage,
+    offers: &[(Addr, OpenInterest)],
+) -> StdResult<()> {
+    clear_outstanding_debt(storage)?;
+    for (addr, _) in offers {
+        COUNTER_OFFERS.remove(storage, addr);
+    }
+    Ok(())
 }
 
 #[cfg(test)]
