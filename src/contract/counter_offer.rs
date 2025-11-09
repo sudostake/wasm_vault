@@ -193,9 +193,7 @@ fn snapshot_counter_offer_capacity(
 
     for entry in entries {
         let (addr, interest) = entry?;
-        count = count
-            .checked_add(1)
-            .ok_or_else(|| StdError::msg("counter offer count overflow"))?;
+        count += 1;
         let amount = interest.liquidity_coin.amount;
         let (ref _worst_addr, ref worst_interest) = worst;
         let worst_amount = worst_interest.liquidity_coin.amount;
