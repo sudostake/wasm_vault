@@ -1,7 +1,7 @@
-use cosmwasm_std::{Addr, Coin};
+use cosmwasm_std::{coins, Addr, Coin, Uint256};
 use cw_multi_test::{BasicApp, Executor};
 
-use crate::common::{mock_app, store_contract};
+use crate::common::{mock_app, store_contract, DENOM};
 use wasm_vault::msg::{ExecuteMsg, InfoResponse, InstantiateMsg, QueryMsg};
 use wasm_vault::types::OpenInterest;
 
@@ -164,4 +164,109 @@ fn cannot_close_without_active_open_interest() {
         .unwrap_err();
 
     assert!(err.to_string().contains("No open interest"));
+}
+
+#[test]
+fn lender_can_fund_open_interest_and_refund_counter_offers() {
+    let (mut app, contract_addr, owner) = instantiate_vault();
+
+    let open_interest = OpenInterest {
+        liquidity_coin: Coin::new(1_000u128, DENOM),
+        interest_coin: Coin::new(50u128, "uinterest"),
+        expiry_duration: 86_400u64,
+        collateral: Coin::new(2_000u128, "ucollateral"),
+    };
+
+    app.execute_contract(
+        owner.clone(),
+        contract_addr.clone(),
+        &ExecuteMsg::OpenInterest(open_interest.clone()),
+        &[],
+    )
+    .expect("open interest set");
+
+    let proposer_a = app.api().addr_make("bidder-a");
+    let proposer_b = app.api().addr_make("bidder-b");
+
+    app.send_tokens(owner.clone(), proposer_a.clone(), &coins(5_000, DENOM))
+        .expect("fund proposer a");
+    app.send_tokens(owner.clone(), proposer_b.clone(), &coins(5_000, DENOM))
+        .expect("fund proposer b");
+
+    let proposer_a_balance_before = app
+        .wrap()
+        .query_balance(proposer_a.to_string(), DENOM)
+        .expect("balance query");
+    let proposer_b_balance_before = app
+        .wrap()
+        .query_balance(proposer_b.to_string(), DENOM)
+        .expect("balance query");
+
+    let mut offer_a = open_interest.clone();
+    offer_a.liquidity_coin.amount = offer_a
+        .liquidity_coin
+        .amount
+        .checked_sub(Uint256::from(100u128))
+        .expect("amount stays positive");
+    let mut offer_b = open_interest.clone();
+    offer_b.liquidity_coin.amount = offer_b
+        .liquidity_coin
+        .amount
+        .checked_sub(Uint256::from(200u128))
+        .expect("amount stays positive");
+
+    app.execute_contract(
+        proposer_a.clone(),
+        contract_addr.clone(),
+        &ExecuteMsg::ProposeCounterOffer(offer_a.clone()),
+        &[offer_a.liquidity_coin.clone()],
+    )
+    .expect("offer a stored");
+
+    app.execute_contract(
+        proposer_b.clone(),
+        contract_addr.clone(),
+        &ExecuteMsg::ProposeCounterOffer(offer_b.clone()),
+        &[offer_b.liquidity_coin.clone()],
+    )
+    .expect("offer b stored");
+
+    let lender = app.api().addr_make("direct-lender");
+    app.send_tokens(owner.clone(), lender.clone(), &coins(5_000, DENOM))
+        .expect("fund lender");
+
+    let response = app
+        .execute_contract(
+            lender.clone(),
+            contract_addr.clone(),
+            &ExecuteMsg::FundOpenInterest {},
+            &[open_interest.liquidity_coin.clone()],
+        )
+        .expect("funding succeeds");
+
+    assert!(response
+        .events
+        .iter()
+        .any(|event| event.attributes.iter().any(|attr| attr.value == "fund_open_interest")));
+
+    let info: InfoResponse = app
+        .wrap()
+        .query_wasm_smart(contract_addr.clone(), &QueryMsg::Info)
+        .expect("info query succeeds");
+
+    assert_eq!(info.lender, Some(lender.to_string()));
+    assert_eq!(info.open_interest, Some(open_interest.clone()));
+    assert!(info.counter_offers.is_none());
+
+    let proposer_a_balance_after = app
+        .wrap()
+        .query_balance(proposer_a.to_string(), DENOM)
+        .expect("balance query");
+    let proposer_b_balance_after = app
+        .wrap()
+        .query_balance(proposer_b.to_string(), DENOM)
+        .expect("balance query");
+
+    assert_eq!(proposer_a_balance_after.amount, proposer_a_balance_before.amount);
+    assert_eq!(proposer_b_balance_after.amount, proposer_b_balance_before.amount);
 }
