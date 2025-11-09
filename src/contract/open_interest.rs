@@ -140,10 +140,10 @@ fn clear_counter_offers_and_debt(
     storage: &mut dyn Storage,
     offers: &[(Addr, OpenInterest)],
 ) -> StdResult<()> {
-    OUTSTANDING_DEBT.save(storage, &None)?;
     for (addr, _) in offers {
         COUNTER_OFFERS.remove(storage, addr);
     }
+    OUTSTANDING_DEBT.save(storage, &None)?;
     Ok(())
 }
 
