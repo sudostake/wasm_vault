@@ -120,7 +120,8 @@ fn validate_coin(coin: &Coin, field: &'static str) -> Result<(), ContractError> 
 
 fn refund_counter_offer_escrow(storage: &mut dyn Storage) -> StdResult<Vec<BankMsg>> {
     // Gather all refunds first; we only mutate storage after this succeeds so failed collection
-    // leaves both COUNTER_OFFERS and OUTSTANDING_DEBT untouched.
+    // leaves both COUNTER_OFFERS and OUTSTANDING_DEBT untouched. We clear debt before wiping
+    // counter offers to avoid a partially-cleared state if persistence ever fails.
     let refunds = COUNTER_OFFERS
         .range(storage, None, None, Order::Ascending)
         .map(|entry| {
@@ -131,8 +132,8 @@ fn refund_counter_offer_escrow(storage: &mut dyn Storage) -> StdResult<Vec<BankM
         })
         .collect::<StdResult<Vec<_>>>()?;
 
-    COUNTER_OFFERS.clear(storage);
     clear_outstanding_debt(storage)?;
+    COUNTER_OFFERS.clear(storage);
 
     Ok(refunds)
 }
