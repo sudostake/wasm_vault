@@ -24,6 +24,8 @@ pub struct OpenInterest {
 
 #[cw_serde]
 pub struct CounterOffer {
+    /// Address of the lender proposing a change.
+    pub proposer: String,
     /// Proposed open interest terms. Only the amount should deviate.
     pub open_interest: OpenInterest,
 }

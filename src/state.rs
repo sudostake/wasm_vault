@@ -1,17 +1,17 @@
-use crate::types::{CounterOffer, OpenInterest};
+use crate::types::OpenInterest;
 use cosmwasm_std::{Addr, Coin};
-use cw_storage_plus::Item;
+use cw_storage_plus::{Item, Map};
 
 pub const OWNER: Item<Addr> = Item::new("owner");
 pub const LENDER: Item<Option<Addr>> = Item::new("lender");
 pub const OUTSTANDING_DEBT: Item<Option<Coin>> = Item::new("outstanding_debt");
 pub const OPEN_INTEREST: Item<Option<OpenInterest>> = Item::new("open_interest");
-pub const COUNTER_OFFERS: Item<Option<Vec<CounterOffer>>> = Item::new("counter_offers");
+pub const COUNTER_OFFERS: Map<&Addr, OpenInterest> = Map::new("counter_offers");
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cosmwasm_std::{testing::mock_dependencies, Coin};
+    use cosmwasm_std::{testing::mock_dependencies, Coin, Order};
 
     #[test]
     fn owner_item_persists_addresses() {
@@ -105,32 +105,39 @@ mod tests {
     }
 
     #[test]
-    fn counter_offer_list_handles_optional_state() {
+    fn counter_offer_map_handles_unique_proposers() {
         let mut deps = mock_dependencies();
-        let entry = CounterOffer {
-            open_interest: OpenInterest {
-                liquidity_coin: Coin::new(100u128, "uusd"),
-                interest_coin: Coin::new(5u128, "uusd"),
-                expiry_duration: 86_400u64,
-                collateral: Coin::new(200u128, "ujuno"),
-            },
+        let proposer_a = Addr::unchecked("lender-a");
+        let proposer_b = Addr::unchecked("lender-b");
+        let entry_a = OpenInterest {
+            liquidity_coin: Coin::new(100u128, "uusd"),
+            interest_coin: Coin::new(5u128, "uusd"),
+            expiry_duration: 86_400u64,
+            collateral: Coin::new(200u128, "ujuno"),
+        };
+        let entry_b = OpenInterest {
+            liquidity_coin: Coin::new(250u128, "uusd"),
+            interest_coin: Coin::new(15u128, "uusd"),
+            expiry_duration: 120_000u64,
+            collateral: Coin::new(225u128, "ujuno"),
         };
 
         COUNTER_OFFERS
-            .save(deps.as_mut().storage, &Some(vec![entry.clone()]))
+            .save(deps.as_mut().storage, &proposer_a, &entry_a)
+            .expect("save succeeds");
+        COUNTER_OFFERS
+            .save(deps.as_mut().storage, &proposer_b, &entry_b)
             .expect("save succeeds");
 
-        let loaded = COUNTER_OFFERS
-            .load(deps.as_ref().storage)
+        let loaded_a = COUNTER_OFFERS
+            .load(deps.as_ref().storage, &proposer_a)
             .expect("load succeeds");
+        assert_eq!(loaded_a, entry_a);
 
-        assert_eq!(loaded, Some(vec![entry]));
-
-        let fresh_deps = mock_dependencies();
-        let missing = COUNTER_OFFERS
-            .may_load(fresh_deps.as_ref().storage)
-            .expect("may_load succeeds");
-
-        assert!(missing.is_none());
+        let all: Vec<_> = COUNTER_OFFERS
+            .range(deps.as_ref().storage, None, None, Order::Ascending)
+            .map(|entry| entry.expect("range succeeds"))
+            .collect();
+        assert_eq!(all.len(), 2);
     }
 }
