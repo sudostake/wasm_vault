@@ -107,10 +107,10 @@ pub fn fund(deps: DepsMut, _env: Env, info: MessageInfo) -> Result<Response, Con
     validate_liquidity_funding(&info, &open_interest.liquidity_coin)?;
 
     let lender = info.sender;
+    LENDER.save(deps.storage, &Some(lender.clone()))?;
+
     let refund_msgs = refund_counter_offer_escrow(deps.storage)?;
     let refund_count = refund_msgs.len();
-
-    LENDER.save(deps.storage, &Some(lender.clone()))?;
 
     Ok(Response::new().add_messages(refund_msgs).add_attributes([
         attr("action", "fund_open_interest"),
