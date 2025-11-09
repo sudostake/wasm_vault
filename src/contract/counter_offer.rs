@@ -33,10 +33,15 @@ pub fn propose(
         return Err(ContractError::CounterOfferAlreadyExists {});
     }
 
+    let eviction_candidate = determine_eviction_candidate(deps.storage, &proposed_interest)?;
+
+    if let Some((addr, offer)) = &eviction_candidate {
+        COUNTER_OFFERS.remove(deps.storage, addr);
+        release_outstanding_debt(deps.storage, &offer.liquidity_coin)?;
+    }
+
     add_outstanding_debt(deps.storage, &proposed_interest.liquidity_coin)?;
     COUNTER_OFFERS.save(deps.storage, &info.sender, &proposed_interest)?;
-
-    let evicted = enforce_capacity(deps.storage)?;
 
     let mut response = Response::new().add_attributes([
         attr("action", "propose_counter_offer"),
@@ -47,8 +52,7 @@ pub fn propose(
         ),
     ]);
 
-    if let Some((addr, offer)) = evicted {
-        release_outstanding_debt(deps.storage, &offer.liquidity_coin)?;
+    if let Some((addr, offer)) = eviction_candidate {
         response = response
             .add_attribute("evicted_proposer", addr.as_str())
             .add_message(BankMsg::Send {
@@ -147,41 +151,61 @@ fn release_outstanding_debt(storage: &mut dyn cosmwasm_std::Storage, coin: &Coin
     Ok(())
 }
 
-fn enforce_capacity(
+fn determine_eviction_candidate(
     storage: &mut dyn cosmwasm_std::Storage,
-) -> StdResult<Option<(Addr, OpenInterest)>> {
-    let mut count: u16 = 0;
-    let mut worst: Option<(Addr, OpenInterest)> = None;
+    proposed: &OpenInterest,
+) -> Result<Option<(Addr, OpenInterest)>, ContractError> {
+    let snapshot = snapshot_counter_offer_capacity(storage)?;
+    let Some((count, (worst_addr, worst_offer))) = snapshot else {
+        return Ok(None);
+    };
+    let max_capacity = MAX_COUNTER_OFFERS;
 
-    for entry in COUNTER_OFFERS.range(storage, None, None, Order::Ascending) {
-        let (addr, interest) = entry?;
-        count += 1;
-        let amount = interest.liquidity_coin.amount;
-
-        let should_replace = match &worst {
-            Some((worst_addr, worst_interest)) => {
-                let worst_amount = worst_interest.liquidity_coin.amount;
-                amount < worst_amount
-                    || (amount == worst_amount && addr.as_str() < worst_addr.as_str())
-            }
-            None => true,
-        };
-
-        if should_replace {
-            worst = Some((addr, interest));
-        }
-    }
-
-    if count <= u16::from(MAX_COUNTER_OFFERS) {
+    if count < max_capacity {
         return Ok(None);
     }
 
-    if let Some((addr, offer)) = worst {
-        COUNTER_OFFERS.remove(storage, &addr);
-        Ok(Some((addr, offer)))
-    } else {
-        Ok(None)
+    let new_amount = proposed.liquidity_coin.amount;
+    let worst_amount = worst_offer.liquidity_coin.amount;
+
+    let new_is_worse = new_amount <= worst_amount;
+    if new_is_worse {
+        return Err(ContractError::CounterOfferNotCompetitive {
+            minimum: worst_amount,
+            denom: proposed.liquidity_coin.denom.clone(),
+        });
     }
+
+    Ok(Some((worst_addr, worst_offer)))
+}
+
+fn snapshot_counter_offer_capacity(
+    storage: &mut dyn cosmwasm_std::Storage,
+) -> StdResult<Option<(u8, (Addr, OpenInterest))>> {
+    let mut entries = COUNTER_OFFERS.range(storage, None, None, Order::Ascending);
+    let first = match entries.next() {
+        Some(entry) => entry?,
+        None => return Ok(None),
+    };
+
+    let mut count: u8 = 1;
+    let mut worst = first;
+
+    for entry in entries {
+        let (addr, interest) = entry?;
+        count += 1;
+        let amount = interest.liquidity_coin.amount;
+        let (ref _worst_addr, ref worst_interest) = worst;
+        let worst_amount = worst_interest.liquidity_coin.amount;
+
+        let should_replace = amount < worst_amount;
+
+        if should_replace {
+            worst = (addr, interest);
+        }
+    }
+
+    Ok(Some((count, worst)))
 }
 
 #[cfg(test)]
@@ -507,10 +531,11 @@ mod tests {
         let owner = deps.api.addr_make("owner");
         let active = setup_open_interest(deps.as_mut(), &owner);
         let mut expected_debt = Uint256::zero();
+        let mut lowest_offer: Option<(Addr, Coin)> = None;
 
-        for i in 0..=MAX_COUNTER_OFFERS {
+        for i in 0..MAX_COUNTER_OFFERS {
             let proposer = deps.api.addr_make(&format!("proposer{i}"));
-            let decrement = Uint256::from(1u128 + i as u128);
+            let decrement = Uint256::from(10u128 + i as u128);
             let amount = active
                 .liquidity_coin
                 .amount
@@ -544,22 +569,18 @@ mod tests {
                 .checked_add(refund_coin.amount)
                 .expect("debt sum fits");
 
-            if i == MAX_COUNTER_OFFERS {
-                expected_debt = expected_debt
-                    .checked_sub(refund_coin.amount)
-                    .expect("debt decrement fits");
+            assert!(response.messages.is_empty());
 
-                assert_eq!(response.messages.len(), 1);
-                let msg = response.messages[0].clone().msg;
-                match msg {
-                    cosmwasm_std::CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
-                        assert_eq!(to_address, proposer.to_string());
-                        assert_eq!(amount, vec![refund_coin]);
-                    }
-                    _ => panic!("unexpected message"),
+            let replace_lowest = match &lowest_offer {
+                Some((worst_addr, worst_coin)) => {
+                    refund_coin.amount < worst_coin.amount
+                        || (refund_coin.amount == worst_coin.amount
+                            && proposer.as_str() < worst_addr.as_str())
                 }
-            } else {
-                assert!(response.messages.is_empty());
+                None => true,
+            };
+            if replace_lowest {
+                lowest_offer = Some((proposer.clone(), refund_coin.clone()));
             }
 
             let debt = OUTSTANDING_DEBT
@@ -570,12 +591,174 @@ mod tests {
             assert_eq!(debt.denom, active.liquidity_coin.denom);
         }
 
-        let smallest = deps
-            .api
-            .addr_make(&format!("proposer{}", MAX_COUNTER_OFFERS));
-        let stored = COUNTER_OFFERS
-            .may_load(deps.as_ref().storage, &smallest)
+        let (evicted_addr, evicted_coin) = lowest_offer.expect("worst offer recorded");
+        let better_proposer = deps.api.addr_make("better-proposer");
+        let better_offer = OpenInterest {
+            liquidity_coin: {
+                let mut coin = active.liquidity_coin.clone();
+                coin.amount = coin
+                    .amount
+                    .checked_sub(Uint256::from(5u128))
+                    .expect("amount stays positive");
+                coin
+            },
+            interest_coin: active.interest_coin.clone(),
+            expiry_duration: active.expiry_duration,
+            collateral: active.collateral.clone(),
+        };
+
+        let response = propose(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&better_proposer, &[better_offer.liquidity_coin.clone()]),
+            better_offer.clone(),
+        )
+        .expect("better proposal succeeds");
+
+        assert_eq!(response.messages.len(), 1);
+        let msg = response.messages[0].clone().msg;
+        match msg {
+            cosmwasm_std::CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
+                assert_eq!(to_address, evicted_addr.to_string());
+                assert_eq!(amount, vec![evicted_coin.clone()]);
+            }
+            _ => panic!("unexpected message"),
+        }
+
+        expected_debt = expected_debt
+            .checked_add(better_offer.liquidity_coin.amount)
+            .expect("debt increment fits")
+            .checked_sub(evicted_coin.amount)
+            .expect("debt decrement fits");
+        let debt = OUTSTANDING_DEBT
+            .load(deps.as_ref().storage)
+            .expect("load succeeds")
+            .expect("debt present");
+        assert_eq!(debt.amount, expected_debt);
+        assert_eq!(debt.denom, active.liquidity_coin.denom);
+
+        let stored_evicted = COUNTER_OFFERS
+            .may_load(deps.as_ref().storage, &evicted_addr)
             .expect("load succeeds");
-        assert!(stored.is_none());
+        assert!(stored_evicted.is_none());
+
+        let stored_new = COUNTER_OFFERS
+            .may_load(deps.as_ref().storage, &better_proposer)
+            .expect("load succeeds");
+        assert!(stored_new.is_some());
+    }
+
+    #[test]
+    fn rejects_offer_that_would_be_immediately_evicted() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        let active = setup_open_interest(deps.as_mut(), &owner);
+
+        let mut lowest_amount: Option<Uint256> = None;
+
+        for i in 0..MAX_COUNTER_OFFERS {
+            let proposer = deps.api.addr_make(&format!("proposer{i}"));
+            let decrement = Uint256::from(20u128 + i as u128);
+            let amount = active
+                .liquidity_coin
+                .amount
+                .checked_sub(decrement)
+                .expect("amount stays positive");
+            let offer = OpenInterest {
+                liquidity_coin: Coin::new(amount, "uusd"),
+                interest_coin: active.interest_coin.clone(),
+                expiry_duration: active.expiry_duration,
+                collateral: active.collateral.clone(),
+            };
+
+            lowest_amount = match lowest_amount {
+                Some(current) if current <= amount => Some(current),
+                _ => Some(amount),
+            };
+
+            propose(
+                deps.as_mut(),
+                mock_env(),
+                message_info(&proposer, &[offer.liquidity_coin.clone()]),
+                offer,
+            )
+            .expect("setup proposal succeeds");
+        }
+
+        let mut low_offer = active.clone();
+        let min_amount = lowest_amount.expect("lowest amount exists");
+        low_offer.liquidity_coin.amount = min_amount
+            .checked_sub(Uint256::from(1u128))
+            .expect("remains positive");
+
+        let late_proposer = deps.api.addr_make("late-proposer");
+        let err = propose(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&late_proposer, &[low_offer.liquidity_coin.clone()]),
+            low_offer,
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            err,
+            ContractError::CounterOfferNotCompetitive { .. }
+        ));
+    }
+
+    #[test]
+    fn rejects_equal_amount_when_full() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        let active = setup_open_interest(deps.as_mut(), &owner);
+
+        let mut lowest_amount: Option<Uint256> = None;
+
+        for i in 0..MAX_COUNTER_OFFERS {
+            let proposer = deps.api.addr_make(&format!("proposer{i}"));
+            let decrement = Uint256::from(15u128 + i as u128);
+            let amount = active
+                .liquidity_coin
+                .amount
+                .checked_sub(decrement)
+                .expect("amount stays positive");
+            let offer = OpenInterest {
+                liquidity_coin: Coin::new(amount, "uusd"),
+                interest_coin: active.interest_coin.clone(),
+                expiry_duration: active.expiry_duration,
+                collateral: active.collateral.clone(),
+            };
+
+            lowest_amount = match lowest_amount {
+                Some(current) if current <= amount => Some(current),
+                _ => Some(amount),
+            };
+
+            propose(
+                deps.as_mut(),
+                mock_env(),
+                message_info(&proposer, &[offer.liquidity_coin.clone()]),
+                offer,
+            )
+            .expect("setup proposal succeeds");
+        }
+
+        let matching_amount = lowest_amount.expect("lowest amount exists");
+        let mut equal_offer = active.clone();
+        equal_offer.liquidity_coin.amount = matching_amount;
+
+        let late_proposer = deps.api.addr_make("late-proposer");
+        let err = propose(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&late_proposer, &[equal_offer.liquidity_coin.clone()]),
+            equal_offer,
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            err,
+            ContractError::CounterOfferNotCompetitive { .. }
+        ));
     }
 }
