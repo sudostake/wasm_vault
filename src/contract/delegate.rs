@@ -26,7 +26,9 @@ pub fn execute(
     let requested = Uint256::from(amount);
 
     if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
-        return Err(ContractError::OutstandingDebt { amount: debt });
+        if debt.denom == denom {
+            return Err(ContractError::OutstandingDebt { amount: debt });
+        }
     }
 
     let balance = deps
@@ -155,6 +157,8 @@ mod tests {
             .save(deps.as_mut().storage, &Some(Coin::new(500u128, "ucosm")))
             .expect("debt stored");
 
+        deps.querier.staking.update("ucosm", &[], &[]);
+
         let info = message_info(&owner, &[]);
         let validator = deps.api.addr_make("validator").into_string();
         let err =
@@ -165,6 +169,43 @@ mod tests {
             ContractError::OutstandingDebt { amount }
                 if amount == Coin::new(500u128, "ucosm")
         ));
+    }
+
+    #[test]
+    fn allows_delegation_when_outstanding_debt_is_other_denom() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
+
+        OUTSTANDING_DEBT
+            .save(deps.as_mut().storage, &Some(Coin::new(750u128, "uatom")))
+            .expect("debt stored");
+
+        let env = mock_env();
+        let denom = "ucosm";
+        let validator = deps.api.addr_make("validator");
+
+        deps.querier
+            .bank
+            .update_balance(env.contract.address.as_str(), coins(300, denom));
+
+        let validator_addr = validator.clone().into_string();
+        let validator_obj = Validator::create(
+            validator_addr.clone(),
+            Decimal::percent(5),
+            Decimal::percent(10),
+            Decimal::percent(1),
+        );
+
+        deps.querier.staking.update(denom, &[validator_obj], &[]);
+
+        let info = message_info(&owner, &[]);
+        let amount = Uint128::new(200);
+
+        let response =
+            execute(deps.as_mut(), env, info, validator_addr.clone(), amount).expect("succeeds");
+
+        assert_eq!(response.messages.len(), 1);
     }
 
     #[test]
