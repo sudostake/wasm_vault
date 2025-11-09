@@ -123,28 +123,19 @@ fn refund_counter_offer_escrow(storage: &mut dyn Storage) -> StdResult<Vec<BankM
         .range(storage, None, None, Order::Ascending)
         .collect::<StdResult<Vec<(Addr, OpenInterest)>>>()?;
 
-    let refunds = offers
-        .iter()
-        .map(|(addr, offer)| BankMsg::Send {
+    let mut refunds = Vec::with_capacity(offers.len());
+
+    for (addr, offer) in offers {
+        refunds.push(BankMsg::Send {
             to_address: addr.to_string(),
             amount: vec![offer.liquidity_coin.clone()],
-        })
-        .collect::<Vec<_>>();
+        });
+        COUNTER_OFFERS.remove(storage, &addr);
+    }
 
-    clear_counter_offers_and_debt(storage, &offers)?;
+    OUTSTANDING_DEBT.save(storage, &None)?;
 
     Ok(refunds)
-}
-
-fn clear_counter_offers_and_debt(
-    storage: &mut dyn Storage,
-    offers: &[(Addr, OpenInterest)],
-) -> StdResult<()> {
-    for (addr, _) in offers {
-        COUNTER_OFFERS.remove(storage, addr);
-    }
-    OUTSTANDING_DEBT.save(storage, &None)?;
-    Ok(())
 }
 
 #[cfg(test)]
