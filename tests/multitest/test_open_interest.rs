@@ -244,10 +244,10 @@ fn lender_can_fund_open_interest_and_refund_counter_offers() {
         )
         .expect("funding succeeds");
 
-    assert!(response
-        .events
+    assert!(response.events.iter().any(|event| event
+        .attributes
         .iter()
-        .any(|event| event.attributes.iter().any(|attr| attr.value == "fund_open_interest")));
+        .any(|attr| attr.value == "fund_open_interest")));
 
     let info: InfoResponse = app
         .wrap()
@@ -267,6 +267,12 @@ fn lender_can_fund_open_interest_and_refund_counter_offers() {
         .query_balance(proposer_b.to_string(), DENOM)
         .expect("balance query");
 
-    assert_eq!(proposer_a_balance_after.amount, proposer_a_balance_before.amount);
-    assert_eq!(proposer_b_balance_after.amount, proposer_b_balance_before.amount);
+    assert_eq!(
+        proposer_a_balance_after.amount,
+        proposer_a_balance_before.amount
+    );
+    assert_eq!(
+        proposer_b_balance_after.amount,
+        proposer_b_balance_before.amount
+    );
 }

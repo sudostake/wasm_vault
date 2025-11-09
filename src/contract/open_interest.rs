@@ -112,21 +112,19 @@ pub fn fund(deps: DepsMut, _env: Env, info: MessageInfo) -> Result<Response, Con
 
     LENDER.save(deps.storage, &Some(lender.clone()))?;
 
-    Ok(Response::new()
-        .add_messages(refund_msgs)
-        .add_attributes([
-            attr("action", "fund_open_interest"),
-            attr("lender", lender.as_str()),
-            attr(
-                "liquidity_denom",
-                open_interest.liquidity_coin.denom.clone(),
-            ),
-            attr(
-                "liquidity_amount",
-                open_interest.liquidity_coin.amount.to_string(),
-            ),
-            attr("refunded_offers", refund_count.to_string()),
-        ]))
+    Ok(Response::new().add_messages(refund_msgs).add_attributes([
+        attr("action", "fund_open_interest"),
+        attr("lender", lender.as_str()),
+        attr(
+            "liquidity_denom",
+            open_interest.liquidity_coin.denom.clone(),
+        ),
+        attr(
+            "liquidity_amount",
+            open_interest.liquidity_coin.amount.to_string(),
+        ),
+        attr("refunded_offers", refund_count.to_string()),
+    ]))
 }
 
 fn validate_open_interest(open_interest: &OpenInterest) -> Result<(), ContractError> {
