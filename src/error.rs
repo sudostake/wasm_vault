@@ -84,6 +84,13 @@ pub enum ContractError {
         received: Uint256,
     },
 
+    #[error("Funding escrow must provide {expected} {denom}, received {received}")]
+    OpenInterestFundingMismatch {
+        denom: String,
+        expected: Uint256,
+        received: Uint256,
+    },
+
     #[error("Proposer already has an active counter offer")]
     CounterOfferAlreadyExists {},
 

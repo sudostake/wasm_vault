@@ -42,6 +42,7 @@ pub enum ExecuteMsg {
         new_owner: String,
     },
     OpenInterest(OpenInterest),
+    FundOpenInterest {},
     ProposeCounterOffer(OpenInterest),
     AcceptCounterOffer {
         proposer: String,
