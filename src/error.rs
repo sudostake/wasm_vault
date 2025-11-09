@@ -91,6 +91,9 @@ pub enum ContractError {
         received: Uint256,
     },
 
+    #[error("Fund request does not match the active open interest")]
+    OpenInterestMismatch {},
+
     #[error("Proposer already has an active counter offer")]
     CounterOfferAlreadyExists {},
 
