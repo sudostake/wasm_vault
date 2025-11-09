@@ -64,6 +64,9 @@ pub fn propose(
     Ok(response)
 }
 
+/// Lets the vault owner accept a specific counter offer (`proposer` / `expected_interest`).
+/// Verifies ownership and proposal terms, refunds every other escrowed bidder, updates the lender
+/// and open-interest state, and clears outstanding debt since only the winning liquidity remains locked.
 pub fn accept(
     deps: DepsMut,
     _env: Env,
