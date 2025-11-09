@@ -22,9 +22,8 @@ pub fn execute(
         return Err(ContractError::InvalidWithdrawalAmount {});
     }
 
-    let bonded_denom = deps.querier.query_bonded_denom()?;
-    if denom == bonded_denom {
-        if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
+    if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
+        if debt.denom == denom {
             return Err(ContractError::OutstandingDebt { amount: debt });
         }
     }
@@ -118,11 +117,10 @@ mod tests {
     }
 
     #[test]
-    fn fails_for_outstanding_debt_on_bonded_denom() {
+    fn fails_for_outstanding_debt_on_matching_denom() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
         setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
-        deps.querier.staking.update("ucosm", &[], &[]);
 
         OUTSTANDING_DEBT
             .save(deps.as_mut().storage, &Some(Coin::new(250u128, "ucosm")))
@@ -230,11 +228,10 @@ mod tests {
     }
 
     #[test]
-    fn allows_withdrawal_of_non_bonded_denom_even_with_debt() {
+    fn allows_withdrawal_when_denom_differs_from_debt() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
         setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
-        deps.querier.staking.update("ucosm", &[], &[]);
 
         OUTSTANDING_DEBT
             .save(deps.as_mut().storage, &Some(Coin::new(999u128, "ucosm")))
