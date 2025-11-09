@@ -72,8 +72,8 @@ mod tests {
         let stored_open_interest = OPEN_INTEREST.load(&deps.storage).unwrap();
         assert_eq!(stored_open_interest, None);
 
-        let mut offers = COUNTER_OFFERS
-            .range(&deps.storage, None, None, cosmwasm_std::Order::Ascending);
+        let mut offers =
+            COUNTER_OFFERS.range(&deps.storage, None, None, cosmwasm_std::Order::Ascending);
         assert!(offers.next().is_none());
     }
 
@@ -99,8 +99,8 @@ mod tests {
         let stored_open_interest = OPEN_INTEREST.load(&deps.storage).unwrap();
         assert_eq!(stored_open_interest, None);
 
-        let mut offers = COUNTER_OFFERS
-            .range(&deps.storage, None, None, cosmwasm_std::Order::Ascending);
+        let mut offers =
+            COUNTER_OFFERS.range(&deps.storage, None, None, cosmwasm_std::Order::Ascending);
         assert!(offers.next().is_none());
     }
 }

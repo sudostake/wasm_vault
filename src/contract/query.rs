@@ -78,11 +78,7 @@ mod tests {
             .expect("open interest saved");
         let proposer = deps.api.addr_make("proposer");
         COUNTER_OFFERS
-            .save(
-                deps.as_mut().storage,
-                &proposer,
-                &open_interest,
-            )
+            .save(deps.as_mut().storage, &proposer, &open_interest)
             .expect("counter offer saved");
 
         let response = query(deps.as_ref(), mock_env(), QueryMsg::Info).expect("query succeeds");
