@@ -120,8 +120,9 @@ fn validate_coin(coin: &Coin, field: &'static str) -> Result<(), ContractError> 
 
 fn refund_counter_offer_escrow(storage: &mut dyn Storage) -> StdResult<Vec<BankMsg>> {
     // Gather all refunds first; we only mutate storage after this succeeds so failed collection
-    // leaves both COUNTER_OFFERS and OUTSTANDING_DEBT untouched. We clear debt before wiping
-    // counter offers to avoid a partially-cleared state if persistence ever fails.
+    // leaves both COUNTER_OFFERS and OUTSTANDING_DEBT untouched. We intentionally clear debt before
+    // wiping counter offers: if persistence fails mid-way, it's safer to have lingering offers with
+    // debt still recorded than the reverse scenario.
     let refunds = COUNTER_OFFERS
         .range(storage, None, None, Order::Ascending)
         .map(|entry| {
@@ -588,7 +589,7 @@ mod tests {
             .iter()
             .map(|msg| match &msg.msg {
                 cosmwasm_std::CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
-                    (to_address.clone(), amount.clone())
+                    (to_address.as_str(), amount.as_slice())
                 }
                 msg => panic!("unexpected message: {msg:?}"),
             })
@@ -597,8 +598,14 @@ mod tests {
         recipients.sort_by(|a, b| a.0.cmp(&b.0));
 
         let mut expected = vec![
-            (proposer_a.to_string(), vec![offer_a.liquidity_coin.clone()]),
-            (proposer_b.to_string(), vec![offer_b.liquidity_coin.clone()]),
+            (
+                proposer_a.as_str(),
+                std::slice::from_ref(&offer_a.liquidity_coin),
+            ),
+            (
+                proposer_b.as_str(),
+                std::slice::from_ref(&offer_b.liquidity_coin),
+            ),
         ];
         expected.sort_by(|a, b| a.0.cmp(&b.0));
 
