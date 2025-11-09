@@ -83,4 +83,7 @@ pub enum ContractError {
         expected: Uint256,
         received: Uint256,
     },
+
+    #[error("Proposer already has an active counter offer")]
+    CounterOfferAlreadyExists {},
 }

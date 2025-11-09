@@ -23,6 +23,13 @@ pub fn propose(
     validate_counter_offer(&active_interest, &proposed_interest)?;
     validate_counter_offer_escrow(&info, &proposed_interest)?;
 
+    if COUNTER_OFFERS
+        .may_load(deps.storage, &info.sender)?
+        .is_some()
+    {
+        return Err(ContractError::CounterOfferAlreadyExists {});
+    }
+
     COUNTER_OFFERS.save(deps.storage, &info.sender, &proposed_interest)?;
 
     let evicted = enforce_capacity(deps.storage)?;
@@ -322,6 +329,50 @@ mod tests {
         assert!(matches!(
             err,
             ContractError::CounterOfferEscrowMismatch { .. }
+        ));
+    }
+
+    #[test]
+    fn rejects_duplicate_counter_offers_from_same_proposer() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        let active = setup_open_interest(deps.as_mut(), &owner);
+        let proposer = deps.api.addr_make("proposer");
+        let offer = OpenInterest {
+            liquidity_coin: {
+                let mut coin = active.liquidity_coin.clone();
+                coin.amount = coin
+                    .amount
+                    .checked_sub(Uint256::from(25u128))
+                    .expect("amount remains positive");
+                coin
+            },
+            interest_coin: active.interest_coin.clone(),
+            expiry_duration: active.expiry_duration,
+            collateral: active.collateral.clone(),
+        };
+
+        let funds = vec![offer.liquidity_coin.clone()];
+
+        propose(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&proposer, &funds),
+            offer.clone(),
+        )
+        .expect("first proposal succeeds");
+
+        let err = propose(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&proposer, &funds),
+            offer,
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            err,
+            ContractError::CounterOfferAlreadyExists {}
         ));
     }
 
