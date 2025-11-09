@@ -1,10 +1,10 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{to_json_binary, Deps, Env, QueryResponse, StdResult};
+use cosmwasm_std::{to_json_binary, Deps, Env, Order, QueryResponse, StdResult};
 
 use crate::msg::QueryMsg;
 use crate::state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OWNER};
-use crate::types::InfoResponse;
+use crate::types::{CounterOffer, InfoResponse};
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<QueryResponse> {
@@ -17,7 +17,21 @@ fn query_info(deps: Deps) -> StdResult<QueryResponse> {
     let owner = OWNER.load(deps.storage)?;
     let lender = LENDER.load(deps.storage)?;
     let open_interest = OPEN_INTEREST.load(deps.storage)?;
-    let counter_offers = COUNTER_OFFERS.load(deps.storage)?;
+    let collected_offers: Vec<CounterOffer> = COUNTER_OFFERS
+        .range(deps.storage, None, None, Order::Ascending)
+        .map(|entry| {
+            let (addr, open_interest) = entry?;
+            Ok(CounterOffer {
+                proposer: addr.into_string(),
+                open_interest,
+            })
+        })
+        .collect::<StdResult<_>>()?;
+    let counter_offers = if collected_offers.is_empty() {
+        None
+    } else {
+        Some(collected_offers)
+    };
 
     let response = InfoResponse {
         message: "wasm_vault".to_string(),
@@ -33,8 +47,7 @@ fn query_info(deps: Deps) -> StdResult<QueryResponse> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::COUNTER_OFFERS;
-    use crate::types::{CounterOffer, OpenInterest};
+    use crate::types::OpenInterest;
     use cosmwasm_std::{
         testing::{mock_dependencies, mock_env},
         Coin,
@@ -63,13 +76,9 @@ mod tests {
         OPEN_INTEREST
             .save(deps.as_mut().storage, &Some(open_interest.clone()))
             .expect("open interest saved");
+        let proposer = deps.api.addr_make("proposer");
         COUNTER_OFFERS
-            .save(
-                deps.as_mut().storage,
-                &Some(vec![CounterOffer {
-                    open_interest: open_interest.clone(),
-                }]),
-            )
+            .save(deps.as_mut().storage, &proposer, &open_interest)
             .expect("counter offer saved");
 
         let response = query(deps.as_ref(), mock_env(), QueryMsg::Info).expect("query succeeds");
@@ -79,8 +88,11 @@ mod tests {
         assert_eq!(info.message, "wasm_vault");
         assert_eq!(info.owner, owner.into_string());
         assert_eq!(info.lender, Some(lender.into_string()));
-        assert_eq!(info.open_interest, Some(open_interest));
-        assert!(info.counter_offers.is_some());
+        assert_eq!(info.open_interest, Some(open_interest.clone()));
+        let offers = info.counter_offers.expect("counter offers present");
+        assert_eq!(offers.len(), 1);
+        assert_eq!(offers[0].proposer, proposer.into_string());
+        assert_eq!(offers[0].open_interest, open_interest);
     }
 
     #[test]
@@ -98,9 +110,6 @@ mod tests {
         OPEN_INTEREST
             .save(deps.as_mut().storage, &None)
             .expect("open interest defaults to none");
-        COUNTER_OFFERS
-            .save(deps.as_mut().storage, &None)
-            .expect("counter offers default to none");
 
         let response = query(deps.as_ref(), mock_env(), QueryMsg::Info).expect("query succeeds");
 

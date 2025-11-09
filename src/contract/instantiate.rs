@@ -5,7 +5,7 @@ use cw2::set_contract_version;
 
 use crate::error::ContractError;
 use crate::msg::InstantiateMsg;
-use crate::state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OUTSTANDING_DEBT, OWNER};
+use crate::state::{LENDER, OPEN_INTEREST, OUTSTANDING_DEBT, OWNER};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:wasm_vault";
@@ -28,7 +28,6 @@ pub fn instantiate(
     LENDER.save(deps.storage, &None)?;
     OUTSTANDING_DEBT.save(deps.storage, &None)?;
     OPEN_INTEREST.save(deps.storage, &None)?;
-    COUNTER_OFFERS.save(deps.storage, &None)?;
 
     Ok(Response::new()
         .add_attribute("method", "instantiate")
@@ -38,6 +37,7 @@ pub fn instantiate(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::COUNTER_OFFERS;
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
 
     #[test]
@@ -72,8 +72,9 @@ mod tests {
         let stored_open_interest = OPEN_INTEREST.load(&deps.storage).unwrap();
         assert_eq!(stored_open_interest, None);
 
-        let offers = COUNTER_OFFERS.load(&deps.storage).unwrap();
-        assert_eq!(offers, None);
+        let mut offers =
+            COUNTER_OFFERS.range(&deps.storage, None, None, cosmwasm_std::Order::Ascending);
+        assert!(offers.next().is_none());
     }
 
     #[test]
@@ -98,7 +99,8 @@ mod tests {
         let stored_open_interest = OPEN_INTEREST.load(&deps.storage).unwrap();
         assert_eq!(stored_open_interest, None);
 
-        let offers = COUNTER_OFFERS.load(&deps.storage).unwrap();
-        assert_eq!(offers, None);
+        let mut offers =
+            COUNTER_OFFERS.range(&deps.storage, None, None, cosmwasm_std::Order::Ascending);
+        assert!(offers.next().is_none());
     }
 }
