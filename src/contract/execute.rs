@@ -338,7 +338,7 @@ mod tests {
         execute(
             deps.as_mut(),
             mock_env(),
-            message_info(&proposer, &[]),
+            message_info(&proposer, &[offer.liquidity_coin.clone()]),
             ExecuteMsg::ProposeCounterOffer(offer.clone()),
         )
         .expect("counter offer succeeds");

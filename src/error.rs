@@ -76,4 +76,11 @@ pub enum ContractError {
 
     #[error("Counter offer liquidity must be less than the active open interest")]
     CounterOfferNotSmaller {},
+
+    #[error("Counter offer escrow must provide {expected} {denom}, received {received}")]
+    CounterOfferEscrowMismatch {
+        denom: String,
+        expected: Uint256,
+        received: Uint256,
+    },
 }

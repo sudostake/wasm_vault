@@ -21,6 +21,7 @@ pub fn propose(
     }
 
     validate_counter_offer(&active_interest, &proposed_interest)?;
+    validate_counter_offer_escrow(&info, &proposed_interest)?;
 
     COUNTER_OFFERS.save(deps.storage, &info.sender, &proposed_interest)?;
 
@@ -62,6 +63,29 @@ fn validate_counter_offer(
 
     if proposed.liquidity_coin.amount >= active.liquidity_coin.amount {
         return Err(ContractError::CounterOfferNotSmaller {});
+    }
+
+    Ok(())
+}
+
+fn validate_counter_offer_escrow(
+    info: &MessageInfo,
+    proposed: &OpenInterest,
+) -> Result<(), ContractError> {
+    let denom = &proposed.liquidity_coin.denom;
+    let expected = Uint256::from(proposed.liquidity_coin.amount);
+    let received = info
+        .funds
+        .iter()
+        .filter(|coin| coin.denom == *denom)
+        .fold(Uint256::zero(), |acc, coin| acc + Uint256::from(coin.amount));
+
+    if received != expected {
+        return Err(ContractError::CounterOfferEscrowMismatch {
+            denom: denom.clone(),
+            expected,
+            received,
+        });
     }
 
     Ok(())
@@ -225,6 +249,83 @@ mod tests {
     }
 
     #[test]
+    fn rejects_missing_escrow_deposit() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        let active = setup_open_interest(deps.as_mut(), &owner);
+        let proposer = deps.api.addr_make("proposer");
+        let offer = OpenInterest {
+            liquidity_coin: {
+                let mut coin = active.liquidity_coin.clone();
+                coin.amount = coin
+                    .amount
+                    .checked_sub(Uint256::from(10u128))
+                    .expect("amount remains positive");
+                coin
+            },
+            interest_coin: active.interest_coin.clone(),
+            expiry_duration: active.expiry_duration,
+            collateral: active.collateral.clone(),
+        };
+
+        let err = propose(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&proposer, &[]),
+            offer,
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            err,
+            ContractError::CounterOfferEscrowMismatch { .. }
+        ));
+    }
+
+    #[test]
+    fn rejects_incorrect_escrow_amount() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        let active = setup_open_interest(deps.as_mut(), &owner);
+        let proposer = deps.api.addr_make("proposer");
+        let offer = OpenInterest {
+            liquidity_coin: {
+                let mut coin = active.liquidity_coin.clone();
+                coin.amount = coin
+                    .amount
+                    .checked_sub(Uint256::from(10u128))
+                    .expect("amount remains positive");
+                coin
+            },
+            interest_coin: active.interest_coin.clone(),
+            expiry_duration: active.expiry_duration,
+            collateral: active.collateral.clone(),
+        };
+
+        let smaller_amount = offer
+            .liquidity_coin
+            .amount
+            .checked_sub(Uint256::from(1u128))
+            .expect("amount remains positive");
+        let mut insufficient_deposit = offer.liquidity_coin.clone();
+        insufficient_deposit.amount = smaller_amount;
+        let funds = vec![insufficient_deposit];
+
+        let err = propose(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&proposer, &funds),
+            offer,
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            err,
+            ContractError::CounterOfferEscrowMismatch { .. }
+        ));
+    }
+
+    #[test]
     fn stores_offer_and_evicts_smallest_when_full() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
@@ -248,7 +349,10 @@ mod tests {
             let response = propose(
                 deps.as_mut(),
                 mock_env(),
-                message_info(&proposer, &[]),
+                {
+                    let funds = vec![offer.liquidity_coin.clone()];
+                    message_info(&proposer, &funds)
+                },
                 offer,
             )
             .expect("proposal succeeds");
