@@ -703,4 +703,60 @@ mod tests {
             ContractError::CounterOfferNotCompetitive { .. }
         ));
     }
+
+    #[test]
+    fn rejects_equal_amount_when_full() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        let active = setup_open_interest(deps.as_mut(), &owner);
+
+        let mut lowest_amount: Option<Uint256> = None;
+
+        for i in 0..MAX_COUNTER_OFFERS {
+            let proposer = deps.api.addr_make(&format!("proposer{i}"));
+            let decrement = Uint256::from(15u128 + i as u128);
+            let amount = active
+                .liquidity_coin
+                .amount
+                .checked_sub(decrement)
+                .expect("amount stays positive");
+            let offer = OpenInterest {
+                liquidity_coin: Coin::new(amount, "uusd"),
+                interest_coin: active.interest_coin.clone(),
+                expiry_duration: active.expiry_duration,
+                collateral: active.collateral.clone(),
+            };
+
+            lowest_amount = match lowest_amount {
+                Some(current) if current <= amount => Some(current),
+                _ => Some(amount),
+            };
+
+            propose(
+                deps.as_mut(),
+                mock_env(),
+                message_info(&proposer, &[offer.liquidity_coin.clone()]),
+                offer,
+            )
+            .expect("setup proposal succeeds");
+        }
+
+        let matching_amount = lowest_amount.expect("lowest amount exists");
+        let mut equal_offer = active.clone();
+        equal_offer.liquidity_coin.amount = matching_amount;
+
+        let late_proposer = deps.api.addr_make("late-proposer");
+        let err = propose(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&late_proposer, &[equal_offer.liquidity_coin.clone()]),
+            equal_offer,
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            err,
+            ContractError::CounterOfferNotCompetitive { .. }
+        ));
+    }
 }
