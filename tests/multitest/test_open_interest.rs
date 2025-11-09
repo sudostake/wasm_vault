@@ -5,6 +5,16 @@ use crate::common::{mock_app, store_contract, DENOM};
 use wasm_vault::msg::{ExecuteMsg, InfoResponse, InstantiateMsg, QueryMsg};
 use wasm_vault::types::OpenInterest;
 
+fn reduce_liquidity_amount(base_offer: &OpenInterest, reduction: Uint256) -> OpenInterest {
+    let mut offer = base_offer.clone();
+    offer.liquidity_coin.amount = offer
+        .liquidity_coin
+        .amount
+        .checked_sub(reduction)
+        .expect("amount stays positive");
+    offer
+}
+
 fn instantiate_vault() -> (BasicApp, Addr, Addr) {
     let mut app = mock_app();
     let code_id = store_contract(&mut app);
@@ -202,18 +212,8 @@ fn lender_can_fund_open_interest_and_refund_counter_offers() {
         .query_balance(proposer_b.to_string(), DENOM)
         .expect("balance query");
 
-    let mut offer_a = open_interest.clone();
-    offer_a.liquidity_coin.amount = offer_a
-        .liquidity_coin
-        .amount
-        .checked_sub(Uint256::from(100u128))
-        .expect("amount stays positive");
-    let mut offer_b = open_interest.clone();
-    offer_b.liquidity_coin.amount = offer_b
-        .liquidity_coin
-        .amount
-        .checked_sub(Uint256::from(200u128))
-        .expect("amount stays positive");
+    let offer_a = reduce_liquidity_amount(&open_interest, Uint256::from(100u128));
+    let offer_b = reduce_liquidity_amount(&open_interest, Uint256::from(200u128));
 
     app.execute_contract(
         proposer_a.clone(),
