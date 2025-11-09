@@ -1,7 +1,7 @@
 use cosmwasm_std::{attr, Coin, DepsMut, Env, MessageInfo, Response, StakingMsg, Uint128, Uint256};
 
 use crate::{
-    state::{OUTSTANDING_DEBT, OWNER},
+    state::{LENDER, OUTSTANDING_DEBT, OWNER},
     ContractError,
 };
 
@@ -30,10 +30,13 @@ pub fn execute(
     }
 
     let denom = deps.querier.query_bonded_denom()?;
+    let lender_present = LENDER.may_load(deps.storage)?.flatten().is_some();
 
-    if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
-        if debt.denom == denom {
-            return Err(ContractError::OutstandingDebt { amount: debt });
+    if lender_present {
+        if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
+            if debt.denom == denom {
+                return Err(ContractError::OutstandingDebt { amount: debt });
+            }
         }
     }
 
@@ -80,12 +83,13 @@ pub fn execute(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::OUTSTANDING_DEBT;
+    use crate::state::{LENDER, OUTSTANDING_DEBT};
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
     use cosmwasm_std::{Addr, Coin, Decimal, FullDelegation, Storage, Uint128, Uint256, Validator};
 
     fn setup_owner_and_zero_debt(storage: &mut dyn Storage, owner: &Addr) {
         OWNER.save(storage, owner).expect("owner stored");
+        LENDER.save(storage, &None).expect("lender cleared");
         OUTSTANDING_DEBT
             .save(storage, &None)
             .expect("zero debt stored");
@@ -136,6 +140,10 @@ mod tests {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
         setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
+        let lender = deps.api.addr_make("lender");
+        LENDER
+            .save(deps.as_mut().storage, &Some(lender))
+            .expect("lender stored");
         let bonded_denom = deps
             .as_ref()
             .querier
@@ -168,6 +176,71 @@ mod tests {
             }
             other => panic!("unexpected error: {:?}", other),
         }
+    }
+
+    #[test]
+    fn allows_redelegation_when_outstanding_debt_matches_bonded_denom_without_lender() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
+        let bonded_denom = deps
+            .as_ref()
+            .querier
+            .query_bonded_denom()
+            .expect("bonded denom available");
+        OUTSTANDING_DEBT
+            .save(
+                deps.as_mut().storage,
+                &Some(Coin::new(250u128, bonded_denom.clone())),
+            )
+            .expect("debt stored");
+
+        let env = mock_env();
+        let contract_addr = env.contract.address.clone();
+        let src_validator_addr = deps.api.addr_make("validator").into_string();
+        let dst_validator_addr = deps.api.addr_make("validator-two").into_string();
+
+        let delegation = FullDelegation::create(
+            contract_addr,
+            src_validator_addr.clone(),
+            Coin::new(300u128, bonded_denom.clone()),
+            Coin::new(300u128, bonded_denom.clone()),
+            vec![],
+        );
+
+        let src_validator_obj = Validator::create(
+            src_validator_addr.clone(),
+            Decimal::percent(5),
+            Decimal::percent(10),
+            Decimal::percent(1),
+        );
+        let dst_validator_obj = Validator::create(
+            dst_validator_addr.clone(),
+            Decimal::percent(4),
+            Decimal::percent(9),
+            Decimal::percent(1),
+        );
+
+        deps.querier.staking.update(
+            bonded_denom.as_str(),
+            &[src_validator_obj, dst_validator_obj],
+            &[delegation],
+        );
+
+        let info = message_info(&owner, &[]);
+        let amount = Uint128::new(50);
+
+        let response = execute(
+            deps.as_mut(),
+            env,
+            info,
+            src_validator_addr.clone(),
+            dst_validator_addr.clone(),
+            amount,
+        )
+        .expect("redelegation succeeds");
+
+        assert_eq!(response.messages.len(), 1);
     }
 
     #[test]
