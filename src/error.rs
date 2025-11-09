@@ -87,7 +87,7 @@ pub enum ContractError {
     #[error("Proposer already has an active counter offer")]
     CounterOfferAlreadyExists {},
 
-    #[error("Counter offers are full; liquidity must exceed {minimum} {denom}")]
+    #[error("Counter offers are full; liquidity must be greater than {minimum} {denom}")]
     CounterOfferNotCompetitive { minimum: Uint256, denom: String },
 
     #[error("Cannot undelegate while an open interest is active")]
