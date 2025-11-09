@@ -120,9 +120,7 @@ fn validate_coin(coin: &Coin, field: &'static str) -> Result<(), ContractError> 
     Ok(())
 }
 
-fn refund_counter_offer_escrow(
-    storage: &mut dyn cosmwasm_std::Storage,
-) -> StdResult<Vec<BankMsg>> {
+fn refund_counter_offer_escrow(storage: &mut dyn cosmwasm_std::Storage) -> StdResult<Vec<BankMsg>> {
     let refunds = COUNTER_OFFERS
         .range(storage, None, None, Order::Ascending)
         .map(|entry| {
@@ -436,10 +434,7 @@ mod tests {
             .expect("open interest stored");
 
         OUTSTANDING_DEBT
-            .save(
-                deps.as_mut().storage,
-                &Some(request.liquidity_coin.clone()),
-            )
+            .save(deps.as_mut().storage, &Some(request.liquidity_coin.clone()))
             .expect("debt stored");
 
         let proposer = deps.api.addr_make("proposer");
@@ -454,10 +449,7 @@ mod tests {
         match &message.msg {
             cosmwasm_std::CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
                 assert_eq!(to_address, proposer.as_str());
-                assert_eq!(
-                    amount.as_slice(),
-                    &[request.liquidity_coin.clone()]
-                );
+                assert_eq!(amount.as_slice(), &[request.liquidity_coin.clone()]);
             }
             msg => panic!("unexpected refund message: {msg:?}"),
         }
@@ -503,10 +495,7 @@ mod tests {
             .save(deps.as_mut().storage, &proposer, &offer)
             .expect("counter offer stored");
         OUTSTANDING_DEBT
-            .save(
-                deps.as_mut().storage,
-                &Some(offer.liquidity_coin.clone()),
-            )
+            .save(deps.as_mut().storage, &Some(offer.liquidity_coin.clone()))
             .expect("debt stored");
 
         close(deps.as_mut(), message_info(&owner, &[])).expect("close succeeds");
@@ -583,10 +572,7 @@ mod tests {
             .expect("offer B stored");
 
         OUTSTANDING_DEBT
-            .save(
-                deps.as_mut().storage,
-                &Some(Coin::new(170u128, "uusd")),
-            )
+            .save(deps.as_mut().storage, &Some(Coin::new(170u128, "uusd")))
             .expect("debt stored");
 
         let response = close(deps.as_mut(), message_info(&owner, &[])).expect("close succeeds");
@@ -606,14 +592,8 @@ mod tests {
         recipients.sort_by(|a, b| a.0.cmp(&b.0));
 
         let mut expected = vec![
-            (
-                proposer_a.to_string(),
-                vec![offer_a.liquidity_coin.clone()],
-            ),
-            (
-                proposer_b.to_string(),
-                vec![offer_b.liquidity_coin.clone()],
-            ),
+            (proposer_a.to_string(), vec![offer_a.liquidity_coin.clone()]),
+            (proposer_b.to_string(), vec![offer_b.liquidity_coin.clone()]),
         ];
         expected.sort_by(|a, b| a.0.cmp(&b.0));
 
