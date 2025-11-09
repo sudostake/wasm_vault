@@ -1,4 +1,6 @@
-use cosmwasm_std::{attr, Addr, DepsMut, Env, MessageInfo, Order, Response, StdResult, Uint256};
+use cosmwasm_std::{
+    attr, Addr, BankMsg, DepsMut, Env, MessageInfo, Order, Response, StdResult, Uint256,
+};
 
 use crate::{
     error::ContractError,
@@ -43,8 +45,13 @@ pub fn propose(
         ),
     ]);
 
-    if let Some(addr) = evicted {
-        response = response.add_attribute("evicted_proposer", addr.as_str());
+    if let Some((addr, offer)) = evicted {
+        response = response
+            .add_attribute("evicted_proposer", addr.as_str())
+            .add_message(BankMsg::Send {
+                to_address: addr.to_string(),
+                amount: vec![offer.liquidity_coin.clone()],
+            });
     }
 
     Ok(response)
@@ -98,22 +105,28 @@ fn validate_counter_offer_escrow(
     Ok(())
 }
 
-fn enforce_capacity(storage: &mut dyn cosmwasm_std::Storage) -> StdResult<Option<Addr>> {
+fn enforce_capacity(
+    storage: &mut dyn cosmwasm_std::Storage,
+) -> StdResult<Option<(Addr, OpenInterest)>> {
     let mut count: u16 = 0;
-    let mut worst: Option<(Addr, Uint256)> = None;
+    let mut worst: Option<(Addr, OpenInterest)> = None;
 
     for entry in COUNTER_OFFERS.range(storage, None, None, Order::Ascending) {
         let (addr, interest) = entry?;
         count += 1;
         let amount = interest.liquidity_coin.amount;
 
-        match &worst {
-            Some((worst_addr, worst_amount)) => {
-                if amount < *worst_amount || (amount == *worst_amount && addr < *worst_addr) {
-                    worst = Some((addr, amount));
-                }
+        let should_replace = match &worst {
+            Some((worst_addr, worst_interest)) => {
+                let worst_amount = worst_interest.liquidity_coin.amount;
+                amount < worst_amount
+                    || (amount == worst_amount && addr.as_str() < worst_addr.as_str())
             }
-            None => worst = Some((addr, amount)),
+            None => true,
+        };
+
+        if should_replace {
+            worst = Some((addr, interest));
         }
     }
 
@@ -121,9 +134,9 @@ fn enforce_capacity(storage: &mut dyn cosmwasm_std::Storage) -> StdResult<Option
         return Ok(None);
     }
 
-    if let Some((addr, _)) = worst {
+    if let Some((addr, offer)) = worst {
         COUNTER_OFFERS.remove(storage, &addr);
-        Ok(Some(addr))
+        Ok(Some((addr, offer)))
     } else {
         Ok(None)
     }
@@ -134,7 +147,7 @@ mod tests {
     use super::*;
     use crate::state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OWNER};
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
-    use cosmwasm_std::{attr, Coin, Uint256};
+    use cosmwasm_std::{attr, BankMsg, Coin, Uint256};
 
     fn setup_open_interest(deps: DepsMut, owner: &Addr) -> OpenInterest {
         let interest = OpenInterest {
@@ -397,11 +410,12 @@ mod tests {
                 collateral: active.collateral.clone(),
             };
 
+            let refund_coin = offer.liquidity_coin.clone();
             let response = propose(
                 deps.as_mut(),
                 mock_env(),
                 {
-                    let funds = vec![offer.liquidity_coin.clone()];
+                    let funds = vec![refund_coin.clone()];
                     message_info(&proposer, &funds)
                 },
                 offer,
@@ -412,6 +426,20 @@ mod tests {
                 response.attributes[0],
                 attr("action", "propose_counter_offer")
             );
+
+            if i == MAX_COUNTER_OFFERS {
+                assert_eq!(response.messages.len(), 1);
+                let msg = response.messages[0].clone().msg;
+                match msg {
+                    cosmwasm_std::CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
+                        assert_eq!(to_address, proposer.to_string());
+                        assert_eq!(amount, vec![refund_coin]);
+                    }
+                    _ => panic!("unexpected message"),
+                }
+            } else {
+                assert!(response.messages.is_empty());
+            }
         }
 
         let smallest = deps
