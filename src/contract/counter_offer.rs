@@ -87,14 +87,12 @@ fn validate_counter_offer_escrow(
     proposed: &OpenInterest,
 ) -> Result<(), ContractError> {
     let denom = &proposed.liquidity_coin.denom;
-    let expected = Uint256::from(proposed.liquidity_coin.amount);
+    let expected = proposed.liquidity_coin.amount;
     let received = info
         .funds
         .iter()
         .filter(|coin| coin.denom == *denom)
-        .fold(Uint256::zero(), |acc, coin| {
-            acc + Uint256::from(coin.amount)
-        });
+        .fold(Uint256::zero(), |acc, coin| acc + coin.amount);
 
     if received != expected {
         return Err(ContractError::CounterOfferEscrowMismatch {
@@ -132,7 +130,7 @@ fn enforce_capacity(
         }
     }
 
-    if count as u16 <= MAX_COUNTER_OFFERS as u16 {
+    if count <= u16::from(MAX_COUNTER_OFFERS) {
         return Ok(None);
     }
 
