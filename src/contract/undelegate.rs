@@ -62,8 +62,10 @@ pub fn execute(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::{OPEN_INTEREST, OUTSTANDING_DEBT};
-    use crate::types::OpenInterest;
+    use crate::{
+        state::{OPEN_INTEREST, OUTSTANDING_DEBT},
+        types::OpenInterest,
+    };
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
     use cosmwasm_std::{Addr, Coin, Decimal, FullDelegation, Storage, Uint128, Uint256, Validator};
 
