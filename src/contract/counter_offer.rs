@@ -92,7 +92,9 @@ fn validate_counter_offer_escrow(
         .funds
         .iter()
         .filter(|coin| coin.denom == *denom)
-        .fold(Uint256::zero(), |acc, coin| acc + Uint256::from(coin.amount));
+        .fold(Uint256::zero(), |acc, coin| {
+            acc + Uint256::from(coin.amount)
+        });
 
     if received != expected {
         return Err(ContractError::CounterOfferEscrowMismatch {
@@ -383,10 +385,7 @@ mod tests {
         )
         .unwrap_err();
 
-        assert!(matches!(
-            err,
-            ContractError::CounterOfferAlreadyExists {}
-        ));
+        assert!(matches!(err, ContractError::CounterOfferAlreadyExists {}));
     }
 
     #[test]
