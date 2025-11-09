@@ -69,7 +69,7 @@ pub fn close(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError
     OPEN_INTEREST.save(deps.storage, &None)?;
     let refund_msgs = refund_counter_offer_escrow(deps.storage)?;
 
-    let mut response = Response::new().add_attributes([
+    let response = Response::new().add_attributes([
         attr("action", "close_open_interest"),
         attr(
             "liquidity_denom",
@@ -91,11 +91,7 @@ pub fn close(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError
         ),
     ]);
 
-    for msg in refund_msgs {
-        response = response.add_message(msg);
-    }
-
-    Ok(response)
+    Ok(response.add_messages(refund_msgs))
 }
 
 fn validate_open_interest(open_interest: &OpenInterest) -> Result<(), ContractError> {
