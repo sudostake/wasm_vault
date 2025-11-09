@@ -1,10 +1,11 @@
 use cosmwasm_std::{
-    attr, Addr, BankMsg, DepsMut, Env, MessageInfo, Order, Response, StdResult, Uint256,
+    attr, Addr, BankMsg, Coin, DepsMut, Env, MessageInfo, Order, Response, StdError, StdResult,
+    Uint256,
 };
 
 use crate::{
     error::ContractError,
-    state::{COUNTER_OFFERS, LENDER, MAX_COUNTER_OFFERS, OPEN_INTEREST},
+    state::{COUNTER_OFFERS, LENDER, MAX_COUNTER_OFFERS, OPEN_INTEREST, OUTSTANDING_DEBT},
     types::OpenInterest,
 };
 
@@ -32,6 +33,7 @@ pub fn propose(
         return Err(ContractError::CounterOfferAlreadyExists {});
     }
 
+    add_outstanding_debt(deps.storage, &proposed_interest.liquidity_coin)?;
     COUNTER_OFFERS.save(deps.storage, &info.sender, &proposed_interest)?;
 
     let evicted = enforce_capacity(deps.storage)?;
@@ -46,6 +48,7 @@ pub fn propose(
     ]);
 
     if let Some((addr, offer)) = evicted {
+        release_outstanding_debt(deps.storage, &offer.liquidity_coin)?;
         response = response
             .add_attribute("evicted_proposer", addr.as_str())
             .add_message(BankMsg::Send {
@@ -105,6 +108,45 @@ fn validate_counter_offer_escrow(
     Ok(())
 }
 
+fn add_outstanding_debt(storage: &mut dyn cosmwasm_std::Storage, coin: &Coin) -> StdResult<()> {
+    let current = OUTSTANDING_DEBT.may_load(storage)?.flatten();
+
+    let updated = match current {
+        Some(mut debt) => {
+            if debt.denom != coin.denom {
+                return Err(StdError::msg("Outstanding debt denom mismatch"));
+            }
+            debt.amount = debt.amount.checked_add(coin.amount)?;
+            Some(debt)
+        }
+        None => Some(coin.clone()),
+    };
+
+    OUTSTANDING_DEBT.save(storage, &updated)?;
+    Ok(())
+}
+
+fn release_outstanding_debt(storage: &mut dyn cosmwasm_std::Storage, coin: &Coin) -> StdResult<()> {
+    let mut debt = OUTSTANDING_DEBT
+        .may_load(storage)?
+        .flatten()
+        .ok_or_else(|| StdError::msg("No outstanding debt to release"))?;
+
+    if debt.denom != coin.denom {
+        return Err(StdError::msg("Outstanding debt denom mismatch"));
+    }
+
+    debt.amount = debt.amount.checked_sub(coin.amount)?;
+    let updated = if debt.amount.is_zero() {
+        None
+    } else {
+        Some(debt)
+    };
+
+    OUTSTANDING_DEBT.save(storage, &updated)?;
+    Ok(())
+}
+
 fn enforce_capacity(
     storage: &mut dyn cosmwasm_std::Storage,
 ) -> StdResult<Option<(Addr, OpenInterest)>> {
@@ -145,7 +187,7 @@ fn enforce_capacity(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OWNER};
+    use crate::state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OUTSTANDING_DEBT, OWNER};
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
     use cosmwasm_std::{attr, BankMsg, Coin, Uint256};
 
@@ -158,6 +200,7 @@ mod tests {
         };
 
         OWNER.save(deps.storage, owner).unwrap();
+        OUTSTANDING_DEBT.save(deps.storage, &None).unwrap();
         LENDER.save(deps.storage, &None).unwrap();
         OPEN_INTEREST
             .save(deps.storage, &Some(interest.clone()))
@@ -387,10 +430,83 @@ mod tests {
     }
 
     #[test]
+    fn accrues_outstanding_debt_for_each_offer() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        let active = setup_open_interest(deps.as_mut(), &owner);
+
+        let proposer_a = deps.api.addr_make("proposer-a");
+        let offer_a = OpenInterest {
+            liquidity_coin: {
+                let mut coin = active.liquidity_coin.clone();
+                coin.amount = coin
+                    .amount
+                    .checked_sub(Uint256::from(10u128))
+                    .expect("amount remains positive");
+                coin
+            },
+            interest_coin: active.interest_coin.clone(),
+            expiry_duration: active.expiry_duration,
+            collateral: active.collateral.clone(),
+        };
+
+        propose(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&proposer_a, &[offer_a.liquidity_coin.clone()]),
+            offer_a.clone(),
+        )
+        .expect("first offer succeeds");
+
+        let debt = OUTSTANDING_DEBT
+            .load(deps.as_ref().storage)
+            .expect("load debt")
+            .expect("debt present");
+        assert_eq!(debt.amount, offer_a.liquidity_coin.amount);
+        assert_eq!(debt.denom, offer_a.liquidity_coin.denom);
+
+        let proposer_b = deps.api.addr_make("proposer-b");
+        let offer_b = OpenInterest {
+            liquidity_coin: {
+                let mut coin = active.liquidity_coin.clone();
+                coin.amount = coin
+                    .amount
+                    .checked_sub(Uint256::from(25u128))
+                    .expect("amount remains positive");
+                coin
+            },
+            interest_coin: active.interest_coin.clone(),
+            expiry_duration: active.expiry_duration,
+            collateral: active.collateral.clone(),
+        };
+
+        propose(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&proposer_b, &[offer_b.liquidity_coin.clone()]),
+            offer_b.clone(),
+        )
+        .expect("second offer succeeds");
+
+        let debt = OUTSTANDING_DEBT
+            .load(deps.as_ref().storage)
+            .expect("load debt")
+            .expect("debt present");
+        let expected_amount = offer_a
+            .liquidity_coin
+            .amount
+            .checked_add(offer_b.liquidity_coin.amount)
+            .expect("sum fits");
+        assert_eq!(debt.amount, expected_amount);
+        assert_eq!(debt.denom, offer_b.liquidity_coin.denom);
+    }
+
+    #[test]
     fn stores_offer_and_evicts_smallest_when_full() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
         let active = setup_open_interest(deps.as_mut(), &owner);
+        let mut expected_debt = Uint256::zero();
 
         for i in 0..=MAX_COUNTER_OFFERS {
             let proposer = deps.api.addr_make(&format!("proposer{i}"));
@@ -424,7 +540,15 @@ mod tests {
                 attr("action", "propose_counter_offer")
             );
 
+            expected_debt = expected_debt
+                .checked_add(refund_coin.amount)
+                .expect("debt sum fits");
+
             if i == MAX_COUNTER_OFFERS {
+                expected_debt = expected_debt
+                    .checked_sub(refund_coin.amount)
+                    .expect("debt decrement fits");
+
                 assert_eq!(response.messages.len(), 1);
                 let msg = response.messages[0].clone().msg;
                 match msg {
@@ -437,6 +561,13 @@ mod tests {
             } else {
                 assert!(response.messages.is_empty());
             }
+
+            let debt = OUTSTANDING_DEBT
+                .load(deps.as_ref().storage)
+                .expect("load succeeds")
+                .expect("debt present");
+            assert_eq!(debt.amount, expected_debt);
+            assert_eq!(debt.denom, active.liquidity_coin.denom);
         }
 
         let smallest = deps
