@@ -33,10 +33,11 @@ pub fn execute(
     let lender_present = matches!(LENDER.may_load(deps.storage)?, Some(Some(_)));
 
     if lender_present {
-        if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
-            if debt.denom == denom {
+        match OUTSTANDING_DEBT.load(deps.storage)? {
+            Some(debt) if debt.denom == denom => {
                 return Err(ContractError::OutstandingDebt { amount: debt });
             }
+            _ => {}
         }
     }
 
