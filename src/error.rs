@@ -70,4 +70,10 @@ pub enum ContractError {
 
     #[error("Expiry duration must be greater than zero seconds")]
     InvalidExpiryDuration {},
+
+    #[error("Counter offer terms must match the active open interest")]
+    CounterOfferTermsMismatch {},
+
+    #[error("Counter offer liquidity must be less than the active open interest")]
+    CounterOfferNotSmaller {},
 }

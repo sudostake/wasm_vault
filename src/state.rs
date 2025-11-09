@@ -2,6 +2,9 @@ use crate::types::OpenInterest;
 use cosmwasm_std::{Addr, Coin};
 use cw_storage_plus::{Item, Map};
 
+/// Maximum number of counter offers a vault will record simultaneously.
+pub const MAX_COUNTER_OFFERS: u8 = u8::MAX;
+
 pub const OWNER: Item<Addr> = Item::new("owner");
 pub const LENDER: Item<Option<Addr>> = Item::new("lender");
 pub const OUTSTANDING_DEBT: Item<Option<Coin>> = Item::new("outstanding_debt");
@@ -139,5 +142,11 @@ mod tests {
             .map(|entry| entry.expect("range succeeds"))
             .collect();
         assert_eq!(all.len(), 2);
+    }
+
+    #[test]
+    fn max_counter_offers_matches_u8_capacity() {
+        assert_eq!(MAX_COUNTER_OFFERS, u8::MAX);
+        assert_eq!(MAX_COUNTER_OFFERS as usize, 255usize);
     }
 }

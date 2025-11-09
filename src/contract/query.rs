@@ -17,7 +17,7 @@ fn query_info(deps: Deps) -> StdResult<QueryResponse> {
     let owner = OWNER.load(deps.storage)?;
     let lender = LENDER.load(deps.storage)?;
     let open_interest = OPEN_INTEREST.load(deps.storage)?;
-    let collected_offers: Vec<CounterOffer> = COUNTER_OFFERS
+    let mut collected_offers: Vec<CounterOffer> = COUNTER_OFFERS
         .range(deps.storage, None, None, Order::Ascending)
         .map(|entry| {
             let (addr, open_interest) = entry?;
@@ -27,6 +27,13 @@ fn query_info(deps: Deps) -> StdResult<QueryResponse> {
             })
         })
         .collect::<StdResult<_>>()?;
+    collected_offers.sort_by(|a, b| {
+        b.open_interest
+            .liquidity_coin
+            .amount
+            .cmp(&a.open_interest.liquidity_coin.amount)
+            .then_with(|| a.proposer.cmp(&b.proposer))
+    });
     let counter_offers = if collected_offers.is_empty() {
         None
     } else {
@@ -120,6 +127,61 @@ mod tests {
         assert_eq!(info.lender, None);
         assert_eq!(info.open_interest, None);
         assert!(info.counter_offers.is_none());
+    }
+
+    #[test]
+    fn query_info_sorts_counter_offers_by_amount() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+
+        OWNER
+            .save(deps.as_mut().storage, &owner)
+            .expect("owner saved");
+        LENDER
+            .save(deps.as_mut().storage, &None)
+            .expect("lender defaults to none");
+
+        let open_interest = OpenInterest {
+            liquidity_coin: Coin::new(1_000u128, "uusd"),
+            interest_coin: Coin::new(50u128, "ujuno"),
+            expiry_duration: 86_400u64,
+            collateral: Coin::new(2_000u128, "uatom"),
+        };
+
+        OPEN_INTEREST
+            .save(deps.as_mut().storage, &Some(open_interest.clone()))
+            .expect("open interest saved");
+
+        let best = deps.api.addr_make("best");
+        let medium = deps.api.addr_make("medium");
+        let worst = deps.api.addr_make("worst");
+        let entries = vec![
+            (medium.clone(), 900u128),
+            (best.clone(), 950u128),
+            (worst.clone(), 875u128),
+        ];
+
+        for (addr, amount) in entries {
+            let mut offer = open_interest.clone();
+            offer.liquidity_coin.amount = amount.into();
+            COUNTER_OFFERS
+                .save(deps.as_mut().storage, &addr, &offer)
+                .expect("counter offer saved");
+        }
+
+        let response = query(deps.as_ref(), mock_env(), QueryMsg::Info).expect("query succeeds");
+        let info: InfoResponse = cosmwasm_std::from_json(response).expect("valid json");
+
+        let offers = info.counter_offers.expect("counter offers present");
+        let proposer_order: Vec<_> = offers.iter().map(|o| o.proposer.clone()).collect();
+        assert_eq!(
+            proposer_order,
+            vec![
+                best.into_string(),
+                medium.into_string(),
+                worst.into_string()
+            ]
+        );
     }
 
     #[test]
