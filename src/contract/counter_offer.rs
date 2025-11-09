@@ -35,6 +35,11 @@ pub fn propose(
 
     let eviction_candidate = determine_eviction_candidate(deps.storage, &proposed_interest)?;
 
+    if let Some((addr, offer)) = &eviction_candidate {
+        COUNTER_OFFERS.remove(deps.storage, addr);
+        release_outstanding_debt(deps.storage, &offer.liquidity_coin)?;
+    }
+
     add_outstanding_debt(deps.storage, &proposed_interest.liquidity_coin)?;
     COUNTER_OFFERS.save(deps.storage, &info.sender, &proposed_interest)?;
 
@@ -48,8 +53,6 @@ pub fn propose(
     ]);
 
     if let Some((addr, offer)) = eviction_candidate {
-        COUNTER_OFFERS.remove(deps.storage, &addr);
-        release_outstanding_debt(deps.storage, &offer.liquidity_coin)?;
         response = response
             .add_attribute("evicted_proposer", addr.as_str())
             .add_message(BankMsg::Send {
@@ -156,7 +159,7 @@ fn determine_eviction_candidate(
     let Some((count, (worst_addr, worst_offer))) = snapshot else {
         return Ok(None);
     };
-    let max_capacity = u16::from(MAX_COUNTER_OFFERS);
+    let max_capacity = MAX_COUNTER_OFFERS;
 
     if count < max_capacity {
         return Ok(None);
@@ -178,25 +181,26 @@ fn determine_eviction_candidate(
 
 fn snapshot_counter_offer_capacity(
     storage: &mut dyn cosmwasm_std::Storage,
-) -> StdResult<Option<(u16, (Addr, OpenInterest))>> {
+) -> StdResult<Option<(u8, (Addr, OpenInterest))>> {
     let mut entries = COUNTER_OFFERS.range(storage, None, None, Order::Ascending);
     let first = match entries.next() {
         Some(entry) => entry?,
         None => return Ok(None),
     };
 
-    let mut count: u16 = 1;
+    let mut count: u8 = 1;
     let mut worst = first;
 
     for entry in entries {
         let (addr, interest) = entry?;
-        count += 1;
+        count = count
+            .checked_add(1)
+            .ok_or_else(|| StdError::msg("counter offer count overflow"))?;
         let amount = interest.liquidity_coin.amount;
-        let (ref worst_addr, ref worst_interest) = worst;
+        let (ref _worst_addr, ref worst_interest) = worst;
         let worst_amount = worst_interest.liquidity_coin.amount;
 
-        let should_replace = amount < worst_amount
-            || (amount == worst_amount && addr.as_str() < worst_addr.as_str());
+        let should_replace = amount < worst_amount;
 
         if should_replace {
             worst = (addr, interest);
