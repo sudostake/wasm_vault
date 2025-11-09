@@ -86,4 +86,5 @@ pub enum ContractError {
 
     #[error("Proposer already has an active counter offer")]
     CounterOfferAlreadyExists {},
+
 }

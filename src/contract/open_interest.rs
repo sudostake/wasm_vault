@@ -1,7 +1,7 @@
-use cosmwasm_std::{attr, Coin, DepsMut, Env, MessageInfo, Response};
+use cosmwasm_std::{attr, BankMsg, Coin, DepsMut, Env, MessageInfo, Order, Response, StdResult};
 
 use crate::{
-    state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OWNER},
+    state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OUTSTANDING_DEBT, OWNER},
     types::OpenInterest,
     ContractError,
 };
@@ -65,9 +65,9 @@ pub fn close(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError
         .ok_or(ContractError::NoOpenInterest {})?;
 
     OPEN_INTEREST.save(deps.storage, &None)?;
-    COUNTER_OFFERS.clear(deps.storage);
+    let refund_msgs = refund_counter_offer_escrow(deps.storage)?;
 
-    Ok(Response::new().add_attributes([
+    let mut response = Response::new().add_attributes([
         attr("action", "close_open_interest"),
         attr(
             "liquidity_denom",
@@ -87,7 +87,13 @@ pub fn close(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError
             "collateral_amount",
             open_interest.collateral.amount.to_string(),
         ),
-    ]))
+    ]);
+
+    for msg in refund_msgs {
+        response = response.add_message(msg);
+    }
+
+    Ok(response)
 }
 
 fn validate_open_interest(open_interest: &OpenInterest) -> Result<(), ContractError> {
@@ -114,18 +120,40 @@ fn validate_coin(coin: &Coin, field: &'static str) -> Result<(), ContractError> 
     Ok(())
 }
 
+fn refund_counter_offer_escrow(
+    storage: &mut dyn cosmwasm_std::Storage,
+) -> StdResult<Vec<BankMsg>> {
+    let refunds = COUNTER_OFFERS
+        .range(storage, None, None, Order::Ascending)
+        .map(|entry| {
+            entry.map(|(addr, offer)| BankMsg::Send {
+                to_address: addr.into_string(),
+                amount: vec![offer.liquidity_coin.clone()],
+            })
+        })
+        .collect::<StdResult<Vec<_>>>()?;
+
+    COUNTER_OFFERS.clear(storage);
+    OUTSTANDING_DEBT.save(storage, &None)?;
+
+    Ok(refunds)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use cosmwasm_std::{
         attr,
         testing::{message_info, mock_dependencies, mock_env},
-        Addr, Order,
+        Addr, BankMsg, Order,
     };
 
     fn setup(deps: DepsMut, owner: &Addr) {
         OWNER.save(deps.storage, owner).expect("owner stored");
         LENDER.save(deps.storage, &None).expect("lender cleared");
+        OUTSTANDING_DEBT
+            .save(deps.storage, &None)
+            .expect("debt cleared");
         OPEN_INTEREST
             .save(deps.storage, &None)
             .expect("open interest cleared");
@@ -407,35 +435,49 @@ mod tests {
             .save(deps.as_mut().storage, &Some(request.clone()))
             .expect("open interest stored");
 
+        OUTSTANDING_DEBT
+            .save(
+                deps.as_mut().storage,
+                &Some(request.liquidity_coin.clone()),
+            )
+            .expect("debt stored");
+
         let proposer = deps.api.addr_make("proposer");
         COUNTER_OFFERS
             .save(deps.as_mut().storage, &proposer, &request)
             .expect("counter offer stored");
 
-        close(deps.as_mut(), message_info(&owner, &[])).expect("close succeeds");
+        let response = close(deps.as_mut(), message_info(&owner, &[])).expect("close succeeds");
+
+        assert_eq!(response.messages.len(), 1);
+        let message = &response.messages[0];
+        match &message.msg {
+            cosmwasm_std::CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
+                assert_eq!(to_address, proposer.as_str());
+                assert_eq!(
+                    amount.as_slice(),
+                    &[request.liquidity_coin.clone()]
+                );
+            }
+            msg => panic!("unexpected refund message: {msg:?}"),
+        }
 
         let mut offers = COUNTER_OFFERS.range(deps.as_ref().storage, None, None, Order::Ascending);
         assert!(offers.next().is_none());
+
+        let debt = OUTSTANDING_DEBT
+            .load(deps.as_ref().storage)
+            .expect("debt queried");
+        assert!(debt.is_none());
     }
 
     #[test]
-    fn opening_interest_clears_stale_counter_offers() {
+    fn owner_can_reopen_interest_after_closing_offers() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
         setup(deps.as_mut(), &owner);
 
-        let stale_offer = build_open_interest(
-            sample_coin(50, "uusd"),
-            sample_coin(5, "ujuno"),
-            10,
-            sample_coin(20, "uatom"),
-        );
-        let proposer = deps.api.addr_make("stale");
-        COUNTER_OFFERS
-            .save(deps.as_mut().storage, &proposer, &stale_offer)
-            .expect("stale offer stored");
-
-        let request = build_open_interest(
+        let initial_request = build_open_interest(
             sample_coin(100, "uusd"),
             sample_coin(5, "ujuno"),
             86_400,
@@ -446,11 +488,140 @@ mod tests {
             deps.as_mut(),
             mock_env(),
             message_info(&owner, &[]),
-            request,
+            initial_request.clone(),
         )
-        .expect("open interest succeeds");
+        .expect("initial open interest succeeds");
+
+        let proposer = deps.api.addr_make("stale");
+        let offer = build_open_interest(
+            sample_coin(90, "uusd"),
+            sample_coin(5, "ujuno"),
+            86_400,
+            sample_coin(200, "uatom"),
+        );
+        COUNTER_OFFERS
+            .save(deps.as_mut().storage, &proposer, &offer)
+            .expect("counter offer stored");
+        OUTSTANDING_DEBT
+            .save(
+                deps.as_mut().storage,
+                &Some(offer.liquidity_coin.clone()),
+            )
+            .expect("debt stored");
+
+        close(deps.as_mut(), message_info(&owner, &[])).expect("close succeeds");
+
+        let reopened_request = build_open_interest(
+            sample_coin(200, "uusd"),
+            sample_coin(10, "ujuno"),
+            172_800,
+            sample_coin(300, "uatom"),
+        );
+
+        let response = execute(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&owner, &[]),
+            reopened_request.clone(),
+        )
+        .expect("reopen succeeds");
+
+        assert!(response.messages.is_empty());
+
+        let stored = OPEN_INTEREST
+            .load(deps.as_ref().storage)
+            .expect("open interest fetched");
+        assert_eq!(stored, Some(reopened_request));
+
+        let debt = OUTSTANDING_DEBT
+            .load(deps.as_ref().storage)
+            .expect("debt fetched");
+        assert!(debt.is_none());
 
         let mut offers = COUNTER_OFFERS.range(deps.as_ref().storage, None, None, Order::Ascending);
         assert!(offers.next().is_none());
+    }
+
+    #[test]
+    fn close_refunds_multiple_offers_and_clears_debt() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        setup(deps.as_mut(), &owner);
+
+        let request = build_open_interest(
+            sample_coin(100, "uusd"),
+            sample_coin(5, "ujuno"),
+            86_400,
+            sample_coin(200, "uatom"),
+        );
+
+        OPEN_INTEREST
+            .save(deps.as_mut().storage, &Some(request.clone()))
+            .expect("open interest stored");
+
+        let proposer_a = deps.api.addr_make("proposer-a");
+        let proposer_b = deps.api.addr_make("proposer-b");
+
+        let offer_a = build_open_interest(
+            sample_coin(90, "uusd"),
+            sample_coin(5, "ujuno"),
+            86_400,
+            sample_coin(200, "uatom"),
+        );
+        let offer_b = build_open_interest(
+            sample_coin(80, "uusd"),
+            sample_coin(5, "ujuno"),
+            86_400,
+            sample_coin(200, "uatom"),
+        );
+
+        COUNTER_OFFERS
+            .save(deps.as_mut().storage, &proposer_a, &offer_a)
+            .expect("offer A stored");
+        COUNTER_OFFERS
+            .save(deps.as_mut().storage, &proposer_b, &offer_b)
+            .expect("offer B stored");
+
+        OUTSTANDING_DEBT
+            .save(
+                deps.as_mut().storage,
+                &Some(Coin::new(170u128, "uusd")),
+            )
+            .expect("debt stored");
+
+        let response = close(deps.as_mut(), message_info(&owner, &[])).expect("close succeeds");
+
+        assert_eq!(response.messages.len(), 2);
+        let mut recipients = response
+            .messages
+            .iter()
+            .map(|msg| match &msg.msg {
+                cosmwasm_std::CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
+                    (to_address.clone(), amount.clone())
+                }
+                msg => panic!("unexpected message: {msg:?}"),
+            })
+            .collect::<Vec<_>>();
+
+        recipients.sort_by(|a, b| a.0.cmp(&b.0));
+
+        let mut expected = vec![
+            (
+                proposer_a.to_string(),
+                vec![offer_a.liquidity_coin.clone()],
+            ),
+            (
+                proposer_b.to_string(),
+                vec![offer_b.liquidity_coin.clone()],
+            ),
+        ];
+        expected.sort_by(|a, b| a.0.cmp(&b.0));
+
+        assert_eq!(recipients, expected);
+
+        let debt = OUTSTANDING_DEBT
+            .load(deps.as_ref().storage)
+            .expect("debt queried");
+        assert!(debt.is_none());
     }
 }
