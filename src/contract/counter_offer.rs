@@ -64,8 +64,8 @@ pub fn propose(
     Ok(response)
 }
 
-/// Lets the vault owner accept a specific counter offer, identified by the `proposer` and
-/// `expected_interest` parameters.
+/// Lets the vault owner accept a specific counter offer, identified by the `proposer: String` and
+/// `expected_interest: OpenInterest` parameters.
 /// Verifies ownership and proposal terms, refunds every other escrowed bidder, updates the lender
 /// and open-interest state, and clears outstanding debt since only the winning liquidity remains locked.
 pub fn accept(
@@ -902,7 +902,7 @@ mod tests {
                 other => panic!("unexpected message: {:?}", other),
             })
             .collect();
-        payouts.sort_by(|a, b| a.0.as_str().cmp(b.0.as_str()));
+        payouts.sort_by(|a, b| a.0.cmp(&b.0));
 
         let rival_str = rival.to_string();
 
