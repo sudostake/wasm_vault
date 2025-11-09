@@ -1,4 +1,5 @@
 mod claim;
+mod counter_offer;
 mod delegate;
 mod execute;
 mod instantiate;

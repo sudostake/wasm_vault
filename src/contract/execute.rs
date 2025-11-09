@@ -2,7 +2,9 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{DepsMut, Env, MessageInfo, Response};
 
-use super::{claim, delegate, open_interest, redelegate, transfer, undelegate, vote, withdraw};
+use super::{
+    claim, counter_offer, delegate, open_interest, redelegate, transfer, undelegate, vote, withdraw,
+};
 use crate::error::ContractError;
 use crate::msg::ExecuteMsg;
 
@@ -44,6 +46,9 @@ pub fn execute(
         ExecuteMsg::OpenInterest(open_interest_msg) => {
             open_interest::execute(deps, env, info, open_interest_msg)
         }
+        ExecuteMsg::ProposeCounterOffer(open_interest) => {
+            counter_offer::propose(deps, env, info, open_interest)
+        }
         ExecuteMsg::CloseOpenInterest {} => open_interest::close(deps, info),
     }
 }
@@ -52,7 +57,7 @@ pub fn execute(
 mod tests {
     use super::*;
     use crate::{
-        state::{LENDER, OPEN_INTEREST, OUTSTANDING_DEBT, OWNER},
+        state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OUTSTANDING_DEBT, OWNER},
         types::OpenInterest,
     };
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
@@ -300,5 +305,47 @@ mod tests {
             .load(deps.as_ref().storage)
             .expect("state loaded");
         assert!(stored.is_none());
+    }
+
+    #[test]
+    fn execute_counter_offer_flows_through_module() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        OWNER
+            .save(deps.as_mut().storage, &owner)
+            .expect("owner stored");
+        LENDER
+            .save(deps.as_mut().storage, &None)
+            .expect("lender cleared");
+
+        let base_interest = OpenInterest {
+            liquidity_coin: cosmwasm_std::Coin::new(1_000u128, "uusd"),
+            interest_coin: cosmwasm_std::Coin::new(50u128, "ujuno"),
+            expiry_duration: 86_400,
+            collateral: cosmwasm_std::Coin::new(2_000u128, "uatom"),
+        };
+
+        OPEN_INTEREST
+            .save(deps.as_mut().storage, &Some(base_interest.clone()))
+            .expect("open interest stored");
+
+        let proposer = deps.api.addr_make("proposer");
+        let offer = OpenInterest {
+            liquidity_coin: cosmwasm_std::Coin::new(950u128, "uusd"),
+            ..base_interest
+        };
+
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&proposer, &[offer.liquidity_coin.clone()]),
+            ExecuteMsg::ProposeCounterOffer(offer.clone()),
+        )
+        .expect("counter offer succeeds");
+
+        let stored = COUNTER_OFFERS
+            .load(deps.as_ref().storage, &proposer)
+            .expect("counter offer stored");
+        assert_eq!(stored, offer);
     }
 }

@@ -1,7 +1,7 @@
 use cosmwasm_std::{attr, Coin, DepsMut, Env, MessageInfo, Response};
 
 use crate::{
-    state::{LENDER, OPEN_INTEREST, OWNER},
+    state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OWNER},
     types::OpenInterest,
     ContractError,
 };
@@ -24,6 +24,7 @@ pub fn execute(
     validate_open_interest(&open_interest)?;
 
     OPEN_INTEREST.save(deps.storage, &Some(open_interest.clone()))?;
+    COUNTER_OFFERS.clear(deps.storage);
 
     Ok(Response::new().add_attributes([
         attr("action", "open_interest"),
@@ -64,6 +65,7 @@ pub fn close(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError
         .ok_or(ContractError::NoOpenInterest {})?;
 
     OPEN_INTEREST.save(deps.storage, &None)?;
+    COUNTER_OFFERS.clear(deps.storage);
 
     Ok(Response::new().add_attributes([
         attr("action", "close_open_interest"),
@@ -118,7 +120,7 @@ mod tests {
     use cosmwasm_std::{
         attr,
         testing::{message_info, mock_dependencies, mock_env},
-        Addr,
+        Addr, Order,
     };
 
     fn setup(deps: DepsMut, owner: &Addr) {
@@ -386,5 +388,69 @@ mod tests {
             .expect("open interest fetched");
 
         assert!(stored.is_none());
+    }
+
+    #[test]
+    fn close_clears_counter_offers() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        setup(deps.as_mut(), &owner);
+
+        let request = build_open_interest(
+            sample_coin(100, "uusd"),
+            sample_coin(5, "ujuno"),
+            86_400,
+            sample_coin(200, "uatom"),
+        );
+
+        OPEN_INTEREST
+            .save(deps.as_mut().storage, &Some(request.clone()))
+            .expect("open interest stored");
+
+        let proposer = deps.api.addr_make("proposer");
+        COUNTER_OFFERS
+            .save(deps.as_mut().storage, &proposer, &request)
+            .expect("counter offer stored");
+
+        close(deps.as_mut(), message_info(&owner, &[])).expect("close succeeds");
+
+        let mut offers = COUNTER_OFFERS.range(deps.as_ref().storage, None, None, Order::Ascending);
+        assert!(offers.next().is_none());
+    }
+
+    #[test]
+    fn opening_interest_clears_stale_counter_offers() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        setup(deps.as_mut(), &owner);
+
+        let stale_offer = build_open_interest(
+            sample_coin(50, "uusd"),
+            sample_coin(5, "ujuno"),
+            10,
+            sample_coin(20, "uatom"),
+        );
+        let proposer = deps.api.addr_make("stale");
+        COUNTER_OFFERS
+            .save(deps.as_mut().storage, &proposer, &stale_offer)
+            .expect("stale offer stored");
+
+        let request = build_open_interest(
+            sample_coin(100, "uusd"),
+            sample_coin(5, "ujuno"),
+            86_400,
+            sample_coin(200, "uatom"),
+        );
+
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&owner, &[]),
+            request,
+        )
+        .expect("open interest succeeds");
+
+        let mut offers = COUNTER_OFFERS.range(deps.as_ref().storage, None, None, Order::Ascending);
+        assert!(offers.next().is_none());
     }
 }

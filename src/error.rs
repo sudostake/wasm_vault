@@ -70,4 +70,20 @@ pub enum ContractError {
 
     #[error("Expiry duration must be greater than zero seconds")]
     InvalidExpiryDuration {},
+
+    #[error("Counter offer terms must match the active open interest")]
+    CounterOfferTermsMismatch {},
+
+    #[error("Counter offer liquidity must be less than the active open interest")]
+    CounterOfferNotSmaller {},
+
+    #[error("Counter offer escrow must provide {expected} {denom}, received {received}")]
+    CounterOfferEscrowMismatch {
+        denom: String,
+        expected: Uint256,
+        received: Uint256,
+    },
+
+    #[error("Proposer already has an active counter offer")]
+    CounterOfferAlreadyExists {},
 }
