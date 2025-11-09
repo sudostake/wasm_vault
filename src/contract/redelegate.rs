@@ -30,7 +30,7 @@ pub fn execute(
     }
 
     let denom = deps.querier.query_bonded_denom()?;
-    let lender_present = LENDER.may_load(deps.storage)?.flatten().is_some();
+    let lender_present = matches!(LENDER.may_load(deps.storage)?, Some(Some(_)));
 
     if lender_present {
         if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
