@@ -125,14 +125,14 @@ fn refund_counter_offer_escrow(storage: &mut dyn Storage) -> StdResult<Vec<BankM
 
     let mut refunds = Vec::with_capacity(offers.len());
 
-    for (addr, offer) in offers {
+    for (addr, offer) in &offers {
         refunds.push(BankMsg::Send {
             to_address: addr.to_string(),
             amount: vec![offer.liquidity_coin.clone()],
         });
-        COUNTER_OFFERS.remove(storage, &addr);
     }
 
+    COUNTER_OFFERS.clear(storage);
     OUTSTANDING_DEBT.save(storage, &None)?;
 
     Ok(refunds)
