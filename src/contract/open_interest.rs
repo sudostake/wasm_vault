@@ -1,4 +1,6 @@
-use cosmwasm_std::{attr, BankMsg, Coin, DepsMut, Env, MessageInfo, Order, Response, StdResult};
+use cosmwasm_std::{
+    attr, BankMsg, Coin, DepsMut, Env, MessageInfo, Order, Response, StdResult, Storage,
+};
 
 use crate::{
     state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OUTSTANDING_DEBT, OWNER},
@@ -120,7 +122,7 @@ fn validate_coin(coin: &Coin, field: &'static str) -> Result<(), ContractError> 
     Ok(())
 }
 
-fn refund_counter_offer_escrow(storage: &mut dyn cosmwasm_std::Storage) -> StdResult<Vec<BankMsg>> {
+fn refund_counter_offer_escrow(storage: &mut dyn Storage) -> StdResult<Vec<BankMsg>> {
     let refunds = COUNTER_OFFERS
         .range(storage, None, None, Order::Ascending)
         .map(|entry| {
@@ -132,9 +134,13 @@ fn refund_counter_offer_escrow(storage: &mut dyn cosmwasm_std::Storage) -> StdRe
         .collect::<StdResult<Vec<_>>>()?;
 
     COUNTER_OFFERS.clear(storage);
-    OUTSTANDING_DEBT.save(storage, &None)?;
+    clear_outstanding_debt(storage)?;
 
     Ok(refunds)
+}
+
+fn clear_outstanding_debt(storage: &mut dyn Storage) -> StdResult<()> {
+    OUTSTANDING_DEBT.save(storage, &None)
 }
 
 #[cfg(test)]
