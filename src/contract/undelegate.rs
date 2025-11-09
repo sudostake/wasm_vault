@@ -17,12 +17,12 @@ pub fn execute(
         return Err(ContractError::Unauthorized {});
     }
 
-    if OPEN_INTEREST.load(deps.storage)?.is_some() {
-        return Err(ContractError::UndelegateWhileOpenInterestActive {});
-    }
-
     if amount.is_zero() {
         return Err(ContractError::InvalidUndelegationAmount {});
+    }
+
+    if OPEN_INTEREST.load(deps.storage)?.is_some() {
+        return Err(ContractError::UndelegateWhileOpenInterestActive {});
     }
 
     let validator_addr = deps.api.addr_validate(&validator)?.into_string();
