@@ -1,13 +1,10 @@
-mod claim;
 mod counter_offer;
-mod delegate;
 mod execute;
 mod instantiate;
 mod open_interest;
 mod query;
-mod redelegate;
+mod staking;
 mod transfer;
-mod undelegate;
 mod vote;
 mod withdraw;
 
