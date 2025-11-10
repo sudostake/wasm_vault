@@ -2,9 +2,7 @@
 use cosmwasm_std::entry_point;
 use cosmwasm_std::{DepsMut, Env, MessageInfo, Response};
 
-use super::{
-    claim, counter_offer, delegate, open_interest, redelegate, transfer, undelegate, vote, withdraw,
-};
+use super::{counter_offer, open_interest, staking, transfer, vote, withdraw};
 use crate::error::ContractError;
 use crate::msg::ExecuteMsg;
 
@@ -18,17 +16,17 @@ pub fn execute(
     match msg {
         ExecuteMsg::Noop {} => Ok(Response::new()),
         ExecuteMsg::Delegate { validator, amount } => {
-            delegate::execute(deps, env, info, validator, amount)
+            staking::delegate::execute(deps, env, info, validator, amount)
         }
         ExecuteMsg::Undelegate { validator, amount } => {
-            undelegate::execute(deps, env, info, validator, amount)
+            staking::undelegate::execute(deps, env, info, validator, amount)
         }
         ExecuteMsg::Redelegate {
             src_validator,
             dst_validator,
             amount,
-        } => redelegate::execute(deps, env, info, src_validator, dst_validator, amount),
-        ExecuteMsg::ClaimDelegatorRewards {} => claim::execute(deps, env, info),
+        } => staking::redelegate::execute(deps, env, info, src_validator, dst_validator, amount),
+        ExecuteMsg::ClaimDelegatorRewards {} => staking::claim::execute(deps, env, info),
         ExecuteMsg::Withdraw {
             denom,
             amount,
