@@ -83,8 +83,8 @@ pub fn accept(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contract::counter_offer::test_helpers::setup_open_interest;
     use crate::contract::counter_offer::propose;
+    use crate::contract::counter_offer::test_helpers::setup_open_interest;
     use crate::error::ContractError;
     use crate::state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OUTSTANDING_DEBT};
     use crate::types::OpenInterest;

@@ -21,8 +21,7 @@ pub fn setup_open_interest(deps: DepsMut, owner: &Addr) -> OpenInterest {
     OPEN_INTEREST
         .save(deps.storage, &Some(interest.clone()))
         .expect("open interest stored");
-    COUNTER_OFFERS
-        .clear(deps.storage);
+    COUNTER_OFFERS.clear(deps.storage);
 
     interest
 }
