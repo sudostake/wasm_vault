@@ -2,7 +2,7 @@ use cosmwasm_std::{attr, BankMsg, DepsMut, Env, MessageInfo, Response};
 
 use crate::{
     error::ContractError,
-    state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OUTSTANDING_DEBT, OWNER},
+    state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST},
     types::OpenInterest,
 };
 
