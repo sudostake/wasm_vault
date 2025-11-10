@@ -244,12 +244,11 @@ fn build_repayment_amounts(
     requirements
         .into_iter()
         .map(|(denom, amount)| {
-            let coin_amount = Uint128::try_from(amount).map_err(|_| {
-                ContractError::RepaymentAmountOverflow {
+            let coin_amount =
+                Uint128::try_from(amount).map_err(|_| ContractError::RepaymentAmountOverflow {
                     denom: denom.clone(),
                     requested: amount,
-                }
-            })?;
+                })?;
 
             Ok((denom, amount, coin_amount))
         })
