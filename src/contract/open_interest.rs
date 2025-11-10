@@ -115,16 +115,15 @@ pub fn repay(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, Con
         .load(deps.storage)?
         .ok_or(ContractError::NoLender {})?;
 
-    let requirements = repayment_requirements(&open_interest)?;
+    let repayment_amounts = build_repayment_amounts(&open_interest)?;
     let contract_addr = env.contract.address.clone();
 
-    let mut repayment_coins = Vec::with_capacity(requirements.len());
-    for (denom, amount) in requirements {
+    let mut repayment_coins = Vec::with_capacity(repayment_amounts.len());
+    for (denom, requested_amount, coin_amount) in repayment_amounts {
         let balance = deps
             .querier
             .query_balance(contract_addr.clone(), denom.clone())?;
         let available_amount = balance.amount;
-        let requested_amount = amount;
 
         if available_amount < requested_amount {
             return Err(ContractError::InsufficientBalance {
@@ -134,9 +133,7 @@ pub fn repay(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, Con
             });
         }
 
-        let coin_amount = Uint128::try_from(amount)
-            .map_err(|_| StdError::msg("repayment amount exceeds Uint128 range"))?;
-        repayment_coins.push(Coin::new(coin_amount.u128(), denom));
+        repayment_coins.push(Coin::new(coin_amount, denom));
     }
 
     OPEN_INTEREST.save(deps.storage, &None)?;
@@ -217,6 +214,8 @@ fn validate_open_interest(open_interest: &OpenInterest) -> Result<(), ContractEr
         return Err(ContractError::InvalidExpiryDuration {});
     }
 
+    validate_repayment_limits(open_interest)?;
+
     Ok(())
 }
 
@@ -230,6 +229,30 @@ fn validate_coin(coin: &Coin, field: &'static str) -> Result<(), ContractError> 
     }
 
     Ok(())
+}
+
+fn validate_repayment_limits(open_interest: &OpenInterest) -> Result<(), ContractError> {
+    build_repayment_amounts(open_interest)?;
+    Ok(())
+}
+
+fn build_repayment_amounts(
+    open_interest: &OpenInterest,
+) -> Result<Vec<(String, Uint256, Uint128)>, ContractError> {
+    let requirements = repayment_requirements(open_interest).map_err(ContractError::Std)?;
+
+    requirements
+        .into_iter()
+        .map(|(denom, amount)| {
+            let coin_amount =
+                Uint128::try_from(amount).map_err(|_| ContractError::RepaymentAmountOverflow {
+                    denom: denom.clone(),
+                    requested: amount,
+                })?;
+
+            Ok((denom, amount, coin_amount))
+        })
+        .collect()
 }
 
 fn validate_liquidity_funding(
@@ -307,7 +330,7 @@ mod tests {
     use cosmwasm_std::{
         attr,
         testing::{message_info, mock_dependencies, mock_env},
-        Addr, BankMsg, Order, Storage, Uint256,
+        Addr, BankMsg, Order, Storage, Uint128, Uint256,
     };
     use std::collections::BTreeMap;
 
@@ -481,6 +504,35 @@ mod tests {
         .unwrap_err();
 
         assert!(matches!(err, ContractError::InvalidExpiryDuration {}));
+    }
+
+    #[test]
+    fn rejects_repayment_overflow() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        setup(deps.as_mut().storage, &owner);
+        let request = build_open_interest(
+            Coin::new(Uint128::MAX.u128(), "uusd"),
+            Coin::new(1u128, "uusd"),
+            86_400,
+            sample_coin(200, "uatom"),
+        );
+
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&owner, &[]),
+            request,
+        )
+        .unwrap_err();
+
+        let expected = Uint256::from(Uint128::MAX) + Uint256::from(1u128);
+
+        assert!(matches!(
+            err,
+            ContractError::RepaymentAmountOverflow { denom, requested }
+                if denom == "uusd" && requested == expected
+        ));
     }
 
     #[test]

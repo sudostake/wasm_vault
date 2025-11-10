@@ -97,6 +97,9 @@ pub enum ContractError {
     #[error("Fund request does not match the active open interest")]
     OpenInterestMismatch {},
 
+    #[error("Repayment requirement for {denom} exceeds Uint128 range: {requested}")]
+    RepaymentAmountOverflow { denom: String, requested: Uint256 },
+
     #[error("Proposer already has an active counter offer")]
     CounterOfferAlreadyExists {},
 
