@@ -136,7 +136,7 @@ pub fn repay(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, Con
 
         let coin_amount = Uint128::try_from(amount)
             .map_err(|_| StdError::msg("repayment amount exceeds Uint128 range"))?;
-        repayment_coins.push(Coin::new(coin_amount, denom));
+        repayment_coins.push(Coin::new(coin_amount.u128(), denom));
     }
 
     OPEN_INTEREST.save(deps.storage, &None)?;
