@@ -123,7 +123,7 @@ pub fn repay(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, Con
         let balance = deps
             .querier
             .query_balance(contract_addr.clone(), denom.clone())?;
-        let available_amount = Uint256::from(balance.amount);
+        let available_amount = balance.amount;
         let requested_amount = amount;
 
         if available_amount < requested_amount {
@@ -288,14 +288,14 @@ fn accumulate_repayment_requirement(
 ) -> StdResult<()> {
     match requirements.entry(coin.denom.clone()) {
         Entry::Occupied(mut entry) => {
-            let sum = entry
-                .get()
-                .checked_add(Uint256::from(coin.amount))
+            let entry_val = *entry.get();
+            let sum = entry_val
+                .checked_add(coin.amount)
                 .map_err(|_| StdError::msg("repayment amount overflow"))?;
             entry.insert(sum);
         }
         Entry::Vacant(entry) => {
-            entry.insert(Uint256::from(coin.amount));
+            entry.insert(coin.amount);
         }
     }
     Ok(())
