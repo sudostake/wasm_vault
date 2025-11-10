@@ -59,6 +59,9 @@ pub enum ContractError {
     #[error("No open interest is currently active")]
     NoOpenInterest {},
 
+    #[error("No lender is currently set for the open interest")]
+    NoLender {},
+
     #[error("A lender has already been set")]
     LenderAlreadySet {},
 

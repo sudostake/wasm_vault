@@ -1,5 +1,6 @@
-use cosmwasm_std::{coins, Addr, Coin, Uint256};
+use cosmwasm_std::{coins, Addr, Coin, Uint128, Uint256};
 use cw_multi_test::{BasicApp, Executor};
+use std::convert::TryFrom;
 
 use crate::common::{mock_app, store_contract, DENOM};
 use wasm_vault::msg::{ExecuteMsg, InfoResponse, InstantiateMsg, QueryMsg};
@@ -275,4 +276,102 @@ fn lender_can_fund_open_interest_and_refund_counter_offers() {
         proposer_b_balance_after.amount,
         proposer_b_balance_before.amount
     );
+}
+
+#[test]
+fn owner_can_repay_funded_open_interest() {
+    let (mut app, contract_addr, owner) = instantiate_vault();
+
+    let open_interest = OpenInterest {
+        liquidity_coin: Coin::new(1_000u128, DENOM),
+        interest_coin: Coin::new(50u128, DENOM),
+        expiry_duration: 86_400u64,
+        collateral: Coin::new(2_000u128, "ucollateral"),
+    };
+
+    app.execute_contract(
+        owner.clone(),
+        contract_addr.clone(),
+        &ExecuteMsg::OpenInterest(open_interest.clone()),
+        &[],
+    )
+    .expect("open interest set");
+
+    let lender = app.api().addr_make("lender");
+    app.send_tokens(owner.clone(), lender.clone(), &coins(5_000, DENOM))
+        .expect("fund lender");
+
+    app.execute_contract(
+        lender.clone(),
+        contract_addr.clone(),
+        &ExecuteMsg::FundOpenInterest(open_interest.clone()),
+        &[open_interest.liquidity_coin.clone()],
+    )
+    .expect("funding succeeds");
+
+    let interest_amount = Uint128::try_from(open_interest.interest_coin.amount)
+        .expect("interest amount fits in Uint128");
+    app.send_tokens(
+        owner.clone(),
+        contract_addr.clone(),
+        &coins(interest_amount.u128(), DENOM),
+    )
+    .expect("deposit interest");
+
+    let lender_balance_before = app
+        .wrap()
+        .query_balance(lender.to_string(), DENOM)
+        .expect("lender balance before repay");
+
+    let response = app
+        .execute_contract(
+            owner.clone(),
+            contract_addr.clone(),
+            &ExecuteMsg::RepayOpenInterest {},
+            &[],
+        )
+        .expect("repay succeeds");
+
+    assert!(response.events.iter().any(|event| {
+        event.ty == "wasm"
+            && event
+                .attributes
+                .iter()
+                .any(|attr| attr.key == "action" && attr.value == "repay_open_interest")
+    }));
+
+    let expected_total = open_interest
+        .liquidity_coin
+        .amount
+        .checked_add(open_interest.interest_coin.amount)
+        .expect("sum fits");
+
+    let lender_balance_after = app
+        .wrap()
+        .query_balance(lender.to_string(), DENOM)
+        .expect("lender balance after repay");
+
+    assert_eq!(
+        lender_balance_after.amount,
+        lender_balance_before
+            .amount
+            .checked_add(expected_total)
+            .expect("sum fits")
+    );
+
+    let info: InfoResponse = app
+        .wrap()
+        .query_wasm_smart(contract_addr.clone(), &QueryMsg::Info)
+        .expect("info query succeeds");
+
+    assert!(info.open_interest.is_none());
+    assert!(info.lender.is_none());
+
+    let balance = app
+        .wrap()
+        .query_balance(contract_addr.clone(), DENOM)
+        .expect("balance query");
+    let balance_amount =
+        Uint128::try_from(balance.amount).expect("contract balance fits into Uint128");
+    assert_eq!(balance_amount.u128(), 0);
 }

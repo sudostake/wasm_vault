@@ -58,6 +58,7 @@ pub fn execute(
         } => counter_offer::accept(deps, env, info, proposer, open_interest),
         ExecuteMsg::CancelCounterOffer {} => counter_offer::cancel(deps, env, info),
         ExecuteMsg::CloseOpenInterest {} => open_interest::close(deps, info),
+        ExecuteMsg::RepayOpenInterest {} => open_interest::repay(deps, env, info),
     }
 }
 
