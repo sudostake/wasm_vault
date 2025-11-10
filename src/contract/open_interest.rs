@@ -1,7 +1,9 @@
 use cosmwasm_std::{
-    attr, Addr, BankMsg, Coin, DepsMut, Env, MessageInfo, Order, Response, StdResult, Storage,
-    Uint256,
+    attr, Addr, BankMsg, Coin, DepsMut, Env, MessageInfo, Order, Response, StdError, StdResult,
+    Storage, Uint128, Uint256,
 };
+use std::collections::{btree_map::Entry, BTreeMap};
+use std::convert::TryFrom;
 
 use crate::{
     state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OUTSTANDING_DEBT, OWNER},
@@ -93,6 +95,76 @@ pub fn close(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError
     ]);
 
     Ok(response.add_messages(refund_msgs))
+}
+
+pub fn repay(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
+    let owner = OWNER.load(deps.storage)?;
+    if info.sender != owner {
+        return Err(ContractError::Unauthorized {});
+    }
+
+    if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
+        return Err(ContractError::OutstandingDebt { amount: debt });
+    }
+
+    let open_interest = OPEN_INTEREST
+        .load(deps.storage)?
+        .ok_or(ContractError::NoOpenInterest {})?;
+
+    let lender = LENDER
+        .load(deps.storage)?
+        .ok_or(ContractError::NoLender {})?;
+
+    let requirements = repayment_requirements(&open_interest)?;
+    let contract_addr = env.contract.address.clone();
+
+    let mut repayment_coins = Vec::with_capacity(requirements.len());
+    for (denom, amount) in requirements {
+        let balance = deps
+            .querier
+            .query_balance(contract_addr.clone(), denom.clone())?;
+        let available_amount = Uint256::from(balance.amount);
+        let requested_amount = amount;
+
+        if available_amount < requested_amount {
+            return Err(ContractError::InsufficientBalance {
+                denom: denom.clone(),
+                available: available_amount,
+                requested: requested_amount,
+            });
+        }
+
+        let coin_amount = Uint128::try_from(amount)
+            .map_err(|_| StdError::msg("repayment amount exceeds Uint128 range"))?;
+        repayment_coins.push(Coin::new(coin_amount, denom));
+    }
+
+    OPEN_INTEREST.save(deps.storage, &None)?;
+    LENDER.save(deps.storage, &None)?;
+    let response = Response::new()
+        .add_attributes([
+            attr("action", "repay_open_interest"),
+            attr("lender", lender.as_str()),
+            attr(
+                "liquidity_denom",
+                open_interest.liquidity_coin.denom.clone(),
+            ),
+            attr(
+                "liquidity_amount",
+                open_interest.liquidity_coin.amount.to_string(),
+            ),
+            attr("interest_denom", open_interest.interest_coin.denom.clone()),
+            attr(
+                "interest_amount",
+                open_interest.interest_coin.amount.to_string(),
+            ),
+        ])
+        .add_message(BankMsg::Send {
+            to_address: lender.to_string(),
+            amount: repayment_coins,
+        });
+
+    Ok(response)
 }
 
 pub fn fund(
@@ -203,24 +275,64 @@ fn refund_counter_offer_escrow(storage: &mut dyn Storage) -> StdResult<Vec<BankM
     Ok(refunds)
 }
 
+fn repayment_requirements(open_interest: &OpenInterest) -> StdResult<BTreeMap<String, Uint256>> {
+    let mut requirements = BTreeMap::new();
+    accumulate_repayment_requirement(&mut requirements, &open_interest.liquidity_coin)?;
+    accumulate_repayment_requirement(&mut requirements, &open_interest.interest_coin)?;
+    Ok(requirements)
+}
+
+fn accumulate_repayment_requirement(
+    requirements: &mut BTreeMap<String, Uint256>,
+    coin: &Coin,
+) -> StdResult<()> {
+    match requirements.entry(coin.denom.clone()) {
+        Entry::Occupied(mut entry) => {
+            let sum = entry
+                .get()
+                .checked_add(Uint256::from(coin.amount))
+                .map_err(|_| StdError::msg("repayment amount overflow"))?;
+            entry.insert(sum);
+        }
+        Entry::Vacant(entry) => {
+            entry.insert(Uint256::from(coin.amount));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use cosmwasm_std::{
         attr,
         testing::{message_info, mock_dependencies, mock_env},
-        Addr, BankMsg, Order, Uint256,
+        Addr, BankMsg, Order, Storage, Uint256,
     };
+    use std::collections::BTreeMap;
 
-    fn setup(deps: DepsMut, owner: &Addr) {
-        OWNER.save(deps.storage, owner).expect("owner stored");
-        LENDER.save(deps.storage, &None).expect("lender cleared");
-        OUTSTANDING_DEBT
-            .save(deps.storage, &None)
-            .expect("debt cleared");
+    fn setup(storage: &mut dyn Storage, owner: &Addr) {
+        OWNER.save(storage, owner).expect("owner stored");
+        LENDER.save(storage, &None).expect("lender cleared");
+        OUTSTANDING_DEBT.save(storage, &None).expect("debt cleared");
         OPEN_INTEREST
-            .save(deps.storage, &None)
+            .save(storage, &None)
             .expect("open interest cleared");
+    }
+
+    fn setup_active_open_interest(
+        storage: &mut dyn Storage,
+        owner: &Addr,
+        lender: &Addr,
+        open_interest: &OpenInterest,
+    ) {
+        setup(storage, owner);
+        OPEN_INTEREST
+            .save(storage, &Some(open_interest.clone()))
+            .expect("open interest stored");
+        LENDER
+            .save(storage, &Some(lender.clone()))
+            .expect("lender stored");
     }
 
     fn sample_coin(amount: u128, denom: &str) -> Coin {
@@ -245,7 +357,7 @@ mod tests {
     fn rejects_non_owner_senders() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        setup(deps.as_mut(), &owner);
+        setup(deps.as_mut().storage, &owner);
         let intruder = deps.api.addr_make("intruder");
         let request = build_open_interest(
             sample_coin(100, "uusd"),
@@ -268,7 +380,7 @@ mod tests {
     fn rejects_when_interest_already_open() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        setup(deps.as_mut(), &owner);
+        setup(deps.as_mut().storage, &owner);
 
         let request = build_open_interest(
             sample_coin(100, "uusd"),
@@ -296,7 +408,7 @@ mod tests {
     fn rejects_zero_coin_amounts() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        setup(deps.as_mut(), &owner);
+        setup(deps.as_mut().storage, &owner);
         let request = build_open_interest(
             Coin::new(0u128, "uusd"),
             sample_coin(5, "ujuno"),
@@ -324,7 +436,7 @@ mod tests {
     fn rejects_empty_denoms() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        setup(deps.as_mut(), &owner);
+        setup(deps.as_mut().storage, &owner);
         let request = build_open_interest(
             sample_coin(100, ""),
             sample_coin(5, "ujuno"),
@@ -352,7 +464,7 @@ mod tests {
     fn rejects_zero_expiry_duration() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        setup(deps.as_mut(), &owner);
+        setup(deps.as_mut().storage, &owner);
         let request = build_open_interest(
             sample_coin(100, "uusd"),
             sample_coin(5, "ujuno"),
@@ -375,7 +487,7 @@ mod tests {
     fn stores_open_interest_when_inputs_valid() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        setup(deps.as_mut(), &owner);
+        setup(deps.as_mut().storage, &owner);
         let request = build_open_interest(
             sample_coin(100, "uusd"),
             sample_coin(5, "ujuno"),
@@ -405,7 +517,7 @@ mod tests {
     fn close_rejects_non_owner_senders() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        setup(deps.as_mut(), &owner);
+        setup(deps.as_mut().storage, &owner);
         let intruder = deps.api.addr_make("intruder");
 
         let err = close(deps.as_mut(), message_info(&intruder, &[])).unwrap_err();
@@ -417,7 +529,7 @@ mod tests {
     fn close_requires_active_open_interest() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        setup(deps.as_mut(), &owner);
+        setup(deps.as_mut().storage, &owner);
 
         let err = close(deps.as_mut(), message_info(&owner, &[])).unwrap_err();
 
@@ -428,7 +540,7 @@ mod tests {
     fn close_rejects_when_lender_present() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        setup(deps.as_mut(), &owner);
+        setup(deps.as_mut().storage, &owner);
 
         let request = build_open_interest(
             sample_coin(100, "uusd"),
@@ -454,7 +566,7 @@ mod tests {
     fn close_clears_open_interest_and_emits_attributes() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        setup(deps.as_mut(), &owner);
+        setup(deps.as_mut().storage, &owner);
 
         let request = build_open_interest(
             sample_coin(100, "uusd"),
@@ -486,7 +598,7 @@ mod tests {
     fn close_clears_counter_offers() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        setup(deps.as_mut(), &owner);
+        setup(deps.as_mut().storage, &owner);
 
         let request = build_open_interest(
             sample_coin(100, "uusd"),
@@ -533,7 +645,7 @@ mod tests {
     fn owner_can_reopen_interest_after_closing_offers() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        setup(deps.as_mut(), &owner);
+        setup(deps.as_mut().storage, &owner);
 
         let initial_request = build_open_interest(
             sample_coin(100, "uusd"),
@@ -601,7 +713,7 @@ mod tests {
     fn close_refunds_multiple_offers_and_clears_debt() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        setup(deps.as_mut(), &owner);
+        setup(deps.as_mut().storage, &owner);
 
         let request = build_open_interest(
             sample_coin(100, "uusd"),
@@ -681,7 +793,7 @@ mod tests {
     fn fund_requires_active_open_interest() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        setup(deps.as_mut(), &owner);
+        setup(deps.as_mut().storage, &owner);
 
         let lender = deps.api.addr_make("lender");
         let expected_interest = build_open_interest(
@@ -705,7 +817,7 @@ mod tests {
     fn fund_rejects_when_lender_already_present() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        setup(deps.as_mut(), &owner);
+        setup(deps.as_mut().storage, &owner);
 
         let request = build_open_interest(
             sample_coin(100, "uusd"),
@@ -737,7 +849,7 @@ mod tests {
     fn fund_validates_exact_liquidity_amount() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        setup(deps.as_mut(), &owner);
+        setup(deps.as_mut().storage, &owner);
 
         let request = build_open_interest(
             sample_coin(100, "uusd"),
@@ -778,7 +890,7 @@ mod tests {
     fn fund_rejects_mismatched_open_interest() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        setup(deps.as_mut(), &owner);
+        setup(deps.as_mut().storage, &owner);
 
         let request = build_open_interest(
             sample_coin(100, "uusd"),
@@ -813,7 +925,7 @@ mod tests {
     fn fund_sets_lender_and_refunds_counter_offers() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
-        setup(deps.as_mut(), &owner);
+        setup(deps.as_mut().storage, &owner);
 
         let request = build_open_interest(
             sample_coin(1_000, "uusd"),
@@ -889,5 +1001,214 @@ mod tests {
             .load(deps.as_ref().storage)
             .expect("debt query succeeds");
         assert!(debt.is_none());
+    }
+
+    #[test]
+    fn repay_rejects_without_active_open_interest() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        setup(deps.as_mut().storage, &owner);
+
+        let err = repay(deps.as_mut(), mock_env(), message_info(&owner, &[])).unwrap_err();
+
+        assert!(matches!(err, ContractError::NoOpenInterest {}));
+    }
+
+    #[test]
+    fn repay_rejects_without_lender() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        setup(deps.as_mut().storage, &owner);
+
+        let interest = build_open_interest(
+            sample_coin(100, "uusd"),
+            sample_coin(15, "uinterest"),
+            86_400,
+            sample_coin(200, "uatom"),
+        );
+        OPEN_INTEREST
+            .save(deps.as_mut().storage, &Some(interest))
+            .expect("open interest stored");
+
+        let err = repay(deps.as_mut(), mock_env(), message_info(&owner, &[])).unwrap_err();
+
+        assert!(matches!(err, ContractError::NoLender {}));
+    }
+
+    #[test]
+    fn repay_rejects_non_owner_senders() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        let lender = deps.api.addr_make("lender");
+        let interest = build_open_interest(
+            sample_coin(100, "uusd"),
+            sample_coin(15, "uinterest"),
+            86_400,
+            sample_coin(200, "uatom"),
+        );
+        setup_active_open_interest(deps.as_mut().storage, &owner, &lender, &interest);
+
+        let intruder = deps.api.addr_make("intruder");
+        let err = repay(deps.as_mut(), mock_env(), message_info(&intruder, &[])).unwrap_err();
+
+        assert!(matches!(err, ContractError::Unauthorized {}));
+    }
+
+    #[test]
+    fn repay_rejects_insufficient_liquidity() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        let lender = deps.api.addr_make("lender");
+        let interest = build_open_interest(
+            sample_coin(100, "uusd"),
+            sample_coin(15, "uinterest"),
+            86_400,
+            sample_coin(200, "uatom"),
+        );
+        setup_active_open_interest(deps.as_mut().storage, &owner, &lender, &interest);
+
+        let env = mock_env();
+        deps.querier.bank.update_balance(
+            env.contract.address.as_str(),
+            vec![interest.interest_coin.clone()],
+        );
+
+        let err = repay(deps.as_mut(), env, message_info(&owner, &[])).unwrap_err();
+
+        assert!(matches!(
+            err,
+            ContractError::InsufficientBalance { denom, .. }
+                if denom == interest.liquidity_coin.denom
+        ));
+    }
+
+    #[test]
+    fn repay_rejects_insufficient_interest() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        let lender = deps.api.addr_make("lender");
+        let interest = build_open_interest(
+            sample_coin(100, "uusd"),
+            sample_coin(15, "uinterest"),
+            86_400,
+            sample_coin(200, "uatom"),
+        );
+        setup_active_open_interest(deps.as_mut().storage, &owner, &lender, &interest);
+
+        let env = mock_env();
+        deps.querier.bank.update_balance(
+            env.contract.address.as_str(),
+            vec![interest.liquidity_coin.clone()],
+        );
+
+        let err = repay(deps.as_mut(), env, message_info(&owner, &[])).unwrap_err();
+
+        assert!(matches!(
+            err,
+            ContractError::InsufficientBalance { denom, .. }
+                if denom == interest.interest_coin.denom
+        ));
+    }
+
+    #[test]
+    fn repay_rejects_with_outstanding_debt() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        let lender = deps.api.addr_make("lender");
+        let interest = build_open_interest(
+            sample_coin(100, "uusd"),
+            sample_coin(15, "uinterest"),
+            86_400,
+            sample_coin(200, "uatom"),
+        );
+        setup_active_open_interest(deps.as_mut().storage, &owner, &lender, &interest);
+
+        OUTSTANDING_DEBT
+            .save(
+                deps.as_mut().storage,
+                &Some(interest.liquidity_coin.clone()),
+            )
+            .expect("debt stored");
+
+        let err = repay(deps.as_mut(), mock_env(), message_info(&owner, &[])).unwrap_err();
+
+        assert!(matches!(
+            err,
+            ContractError::OutstandingDebt { amount }
+                if amount == interest.liquidity_coin
+        ));
+    }
+
+    #[test]
+    fn repay_succeeds_and_clears_state() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        let lender = deps.api.addr_make("lender");
+        let interest = build_open_interest(
+            sample_coin(100, "uusd"),
+            sample_coin(15, "uinterest"),
+            86_400,
+            sample_coin(200, "uatom"),
+        );
+        setup_active_open_interest(deps.as_mut().storage, &owner, &lender, &interest);
+
+        let env = mock_env();
+        deps.querier.bank.update_balance(
+            env.contract.address.as_str(),
+            vec![
+                interest.liquidity_coin.clone(),
+                interest.interest_coin.clone(),
+            ],
+        );
+
+        let response =
+            repay(deps.as_mut(), env.clone(), message_info(&owner, &[])).expect("repay succeeds");
+
+        assert!(response
+            .attributes
+            .iter()
+            .any(|attr| attr.key == "action" && attr.value == "repay_open_interest"));
+        assert!(response
+            .attributes
+            .iter()
+            .any(|attr| attr.key == "lender" && attr.value == lender.to_string()));
+
+        let send_msg = match &response.messages[0].msg {
+            cosmwasm_std::CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
+                assert_eq!(to_address, lender.as_str());
+                amount.clone()
+            }
+            msg => panic!("unexpected message: {msg:?}"),
+        };
+
+        let mut sent = BTreeMap::new();
+        for coin in send_msg {
+            sent.insert(coin.denom.clone(), coin.amount);
+        }
+
+        let mut expected = BTreeMap::new();
+        expected.insert(
+            interest.liquidity_coin.denom.clone(),
+            interest.liquidity_coin.amount,
+        );
+        expected.insert(
+            interest.interest_coin.denom.clone(),
+            interest.interest_coin.amount,
+        );
+
+        assert_eq!(sent, expected);
+
+        assert!(OPEN_INTEREST
+            .load(deps.as_ref().storage)
+            .expect("interest fetched")
+            .is_none());
+        assert!(LENDER
+            .load(deps.as_ref().storage)
+            .expect("lender fetched")
+            .is_none());
+        assert!(OUTSTANDING_DEBT
+            .load(deps.as_ref().storage)
+            .expect("debt fetched")
+            .is_none());
     }
 }
