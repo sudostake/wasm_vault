@@ -43,6 +43,7 @@ pub fn cancel(deps: DepsMut, _env: Env, info: MessageInfo) -> Result<Response, C
 mod tests {
     use super::*;
     use crate::contract::counter_offer::test_helpers::setup_open_interest;
+    use crate::contract::counter_offer::propose;
     use crate::error::ContractError;
     use crate::state::{COUNTER_OFFERS, OPEN_INTEREST, OUTSTANDING_DEBT};
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};

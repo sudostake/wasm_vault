@@ -84,8 +84,9 @@ pub fn accept(
 mod tests {
     use super::*;
     use crate::contract::counter_offer::test_helpers::setup_open_interest;
+    use crate::contract::counter_offer::propose;
     use crate::error::ContractError;
-    use crate::state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OUTSTANDING_DEBT, OWNER};
+    use crate::state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OUTSTANDING_DEBT};
     use crate::types::OpenInterest;
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
     use cosmwasm_std::{attr, BankMsg, Coin, CosmosMsg, Order, Uint256};
