@@ -328,12 +328,9 @@ mod tests {
         setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
 
         let env = mock_env();
-        let bonded_denom = deps.querier.query_bonded_denom().unwrap();
-        let collateral_denom = if bonded_denom == "uatom" {
-            "uosm".to_string()
-        } else {
-            "uatom".to_string()
-        };
+        let bonded_denom = "uosm".to_string();
+        deps.querier.staking.update(bonded_denom.clone(), &[], &[]);
+        let collateral_denom = "uother".to_string();
 
         deps.querier.bank.update_balance(
             env.contract.address.as_str(),
@@ -379,7 +376,7 @@ mod tests {
         setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
 
         let env = mock_env();
-        let bonded_denom = deps.querier.query_bonded_denom().unwrap();
+        let bonded_denom = "ucosm".to_string();
 
         deps.querier.bank.update_balance(
             env.contract.address.as_str(),
