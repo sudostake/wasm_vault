@@ -53,7 +53,7 @@ fn ensure_collateral_available(
     collateral: &Coin,
 ) -> Result<(), ContractError> {
     let denom = collateral.denom.clone();
-    let requested = Uint256::from(collateral.amount);
+    let requested = collateral.amount;
 
     let available = query_available_balance(deps, env, &denom)?;
     if available >= requested {
@@ -97,7 +97,7 @@ fn query_available_balance(deps: Deps, env: &Env, denom: &str) -> StdResult<Uint
     let balance = deps
         .querier
         .query_balance(env.contract.address.clone(), denom.to_string())?;
-    Ok(Uint256::from(balance.amount))
+    Ok(balance.amount)
 }
 
 fn query_staking_rewards_for_denom(deps: Deps, env: &Env, denom: &str) -> StdResult<Uint256> {
@@ -120,7 +120,7 @@ fn query_staked_balance(deps: Deps, env: &Env) -> StdResult<Uint256> {
     delegations
         .into_iter()
         .try_fold(Uint256::zero(), |acc, delegation| {
-            add_uint256(acc, Uint256::from(delegation.amount.amount))
+            add_uint256(acc, delegation.amount.amount)
         })
 }
 
