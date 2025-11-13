@@ -1,17 +1,15 @@
 use cosmwasm_std::{attr, BankMsg, Coin, DepsMut, Env, MessageInfo, Response};
 
 use crate::{
-    state::{LENDER, OPEN_INTEREST, OUTSTANDING_DEBT, OWNER},
+    helpers::require_owner,
+    state::{LENDER, OPEN_INTEREST, OUTSTANDING_DEBT},
     ContractError,
 };
 
 use super::helpers::build_repayment_amounts;
 
 pub fn repay(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
-    let owner = OWNER.load(deps.storage)?;
-    if info.sender != owner {
-        return Err(ContractError::Unauthorized {});
-    }
+    require_owner(&deps, &info)?;
 
     if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
         return Err(ContractError::OutstandingDebt { amount: debt });

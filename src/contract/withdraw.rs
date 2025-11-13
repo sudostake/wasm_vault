@@ -4,7 +4,8 @@ use cosmwasm_std::{
 };
 
 use crate::{
-    state::{OPEN_INTEREST, OUTSTANDING_DEBT, OWNER},
+    helpers::{query_staked_balance, query_staking_rewards_for_denom, require_owner},
+    state::{OPEN_INTEREST, OUTSTANDING_DEBT},
     types::OpenInterest,
     ContractError,
 };
@@ -18,10 +19,7 @@ pub fn execute(
     amount: Uint128,
     recipient: Option<String>,
 ) -> Result<Response, ContractError> {
-    let owner = OWNER.load(deps.storage)?;
-    if info.sender != owner {
-        return Err(ContractError::Unauthorized {});
-    }
+    let owner = require_owner(&deps, &info)?;
 
     if amount.is_zero() {
         return Err(ContractError::InvalidWithdrawalAmount {});
@@ -69,7 +67,7 @@ mod tests {
     use super::*;
     use crate::{
         contract::open_interest::test_helpers::{build_open_interest, sample_coin},
-        state::{OPEN_INTEREST, OUTSTANDING_DEBT},
+        state::{OPEN_INTEREST, OUTSTANDING_DEBT, OWNER},
     };
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
     use cosmwasm_std::{
@@ -500,33 +498,4 @@ fn collateral_lock_for_denom(
     let coverage = rewards.checked_add(staked).map_err(StdError::from)?;
 
     Ok(interest.collateral.amount.saturating_sub(coverage))
-}
-
-fn query_staking_rewards_for_denom(deps: &Deps, env: &Env, denom: &str) -> StdResult<Uint256> {
-    let response = deps
-        .querier
-        .query_delegation_total_rewards(env.contract.address.clone())?;
-
-    response
-        .total
-        .into_iter()
-        .filter(|coin| coin.denom == denom)
-        .try_fold(Uint256::zero(), |acc, coin| {
-            acc.checked_add(coin.amount.to_uint_floor())
-                .map_err(StdError::from)
-        })
-}
-
-fn query_staked_balance(deps: &Deps, env: &Env, denom: &str) -> StdResult<Uint256> {
-    let delegations = deps
-        .querier
-        .query_all_delegations(env.contract.address.clone())?;
-
-    delegations
-        .into_iter()
-        .filter(|delegation| delegation.amount.denom == denom)
-        .try_fold(Uint256::zero(), |acc, delegation| {
-            acc.checked_add(delegation.amount.amount)
-                .map_err(StdError::from)
-        })
 }

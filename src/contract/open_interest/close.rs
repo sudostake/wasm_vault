@@ -1,17 +1,15 @@
 use cosmwasm_std::{attr, DepsMut, MessageInfo, Response};
 
 use crate::{
-    state::{LENDER, OPEN_INTEREST, OWNER},
+    helpers::require_owner,
+    state::{LENDER, OPEN_INTEREST},
     ContractError,
 };
 
 use super::helpers::refund_counter_offer_escrow;
 
 pub fn close(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError> {
-    let owner = OWNER.load(deps.storage)?;
-    if info.sender != owner {
-        return Err(ContractError::Unauthorized {});
-    }
+    require_owner(&deps, &info)?;
 
     if LENDER.load(deps.storage)?.is_some() {
         return Err(ContractError::LenderAlreadySet {});

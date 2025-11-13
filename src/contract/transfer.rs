@@ -1,17 +1,13 @@
 use cosmwasm_std::{attr, DepsMut, MessageInfo, Response};
 
-use crate::{state::OWNER, ContractError};
+use crate::{helpers::require_owner, state::OWNER, ContractError};
 
 pub fn execute(
     deps: DepsMut,
     info: MessageInfo,
     new_owner: String,
 ) -> Result<Response, ContractError> {
-    let current_owner = OWNER.load(deps.storage)?;
-
-    if info.sender != current_owner {
-        return Err(ContractError::Unauthorized {});
-    }
+    let current_owner = require_owner(&deps, &info)?;
 
     let validated_new_owner = deps.api.addr_validate(&new_owner)?;
 
@@ -23,7 +19,7 @@ pub fn execute(
 
     Ok(Response::new().add_attributes([
         attr("action", "transfer_ownership"),
-        attr("previous_owner", info.sender.into_string()),
+        attr("previous_owner", current_owner.to_string()),
         attr("new_owner", validated_new_owner.into_string()),
     ]))
 }

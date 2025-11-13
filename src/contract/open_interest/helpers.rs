@@ -6,13 +6,14 @@ use std::collections::{btree_map::Entry, BTreeMap};
 use std::convert::TryFrom;
 
 use crate::{
+    helpers::{query_staked_balance, query_staking_rewards_for_denom},
     state::{COUNTER_OFFERS, OUTSTANDING_DEBT},
     types::OpenInterest,
     ContractError,
 };
 
 pub(crate) fn validate_open_interest(
-    deps: Deps,
+    deps: &Deps,
     env: &Env,
     open_interest: &OpenInterest,
 ) -> Result<(), ContractError> {
@@ -48,7 +49,7 @@ fn validate_repayment_limits(open_interest: &OpenInterest) -> Result<(), Contrac
 }
 
 fn ensure_collateral_available(
-    deps: Deps,
+    deps: &Deps,
     env: &Env,
     collateral: &Coin,
 ) -> Result<(), ContractError> {
@@ -80,7 +81,7 @@ fn ensure_collateral_available(
     let remainder_after_rewards = remainder_after_balance
         .checked_sub(rewards)
         .expect("rewards < remainder ensures subtraction success");
-    let staked = query_staked_balance(deps, env)?;
+    let staked = query_staked_balance(deps, env, &denom)?;
     if staked >= remainder_after_rewards {
         return Ok(());
     }
@@ -93,35 +94,11 @@ fn ensure_collateral_available(
     })
 }
 
-fn query_available_balance(deps: Deps, env: &Env, denom: &str) -> StdResult<Uint256> {
+fn query_available_balance(deps: &Deps, env: &Env, denom: &str) -> StdResult<Uint256> {
     let balance = deps
         .querier
         .query_balance(env.contract.address.clone(), denom.to_string())?;
     Ok(balance.amount)
-}
-
-fn query_staking_rewards_for_denom(deps: Deps, env: &Env, denom: &str) -> StdResult<Uint256> {
-    let response = deps
-        .querier
-        .query_delegation_total_rewards(env.contract.address.clone())?;
-    response
-        .total
-        .into_iter()
-        .filter(|coin| coin.denom == denom)
-        .try_fold(Uint256::zero(), |acc, coin| {
-            add_uint256(acc, coin.amount.to_uint_floor())
-        })
-}
-
-fn query_staked_balance(deps: Deps, env: &Env) -> StdResult<Uint256> {
-    let delegations = deps
-        .querier
-        .query_all_delegations(env.contract.address.clone())?;
-    delegations
-        .into_iter()
-        .try_fold(Uint256::zero(), |acc, delegation| {
-            add_uint256(acc, delegation.amount.amount)
-        })
 }
 
 fn add_uint256(lhs: Uint256, rhs: Uint256) -> StdResult<Uint256> {
@@ -273,7 +250,7 @@ mod tests {
 
         let open_interest = test_open_interest(sample_coin(200, "uatom"));
 
-        let err = validate_open_interest(deps.as_ref(), &env, &open_interest).unwrap_err();
+        let err = validate_open_interest(&deps.as_ref(), &env, &open_interest).unwrap_err();
 
         assert!(matches!(
             err,
@@ -307,7 +284,7 @@ mod tests {
             .update("ucosm", &[validator], &[delegation]);
 
         let open_interest = test_open_interest(sample_coin(200, "ucosm"));
-        validate_open_interest(deps.as_ref(), &env, &open_interest)
+        validate_open_interest(&deps.as_ref(), &env, &open_interest)
             .expect("collateral should cover");
     }
 
@@ -332,7 +309,7 @@ mod tests {
 
         let open_interest = test_open_interest(sample_coin(200, "ucosm"));
 
-        let err = validate_open_interest(deps.as_ref(), &env, &open_interest).unwrap_err();
+        let err = validate_open_interest(&deps.as_ref(), &env, &open_interest).unwrap_err();
 
         assert!(matches!(
             err,

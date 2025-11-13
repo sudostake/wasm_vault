@@ -1,7 +1,8 @@
 use cosmwasm_std::{attr, Coin, DepsMut, Env, MessageInfo, Response, StakingMsg, Uint128, Uint256};
 
 use crate::{
-    state::{LENDER, OUTSTANDING_DEBT, OWNER},
+    helpers::require_owner,
+    state::{LENDER, OUTSTANDING_DEBT},
     ContractError,
 };
 
@@ -13,10 +14,7 @@ pub fn execute(
     dst_validator: String,
     amount: Uint128,
 ) -> Result<Response, ContractError> {
-    let owner = OWNER.load(deps.storage)?;
-    if info.sender != owner {
-        return Err(ContractError::Unauthorized {});
-    }
+    require_owner(&deps, &info)?;
 
     if amount.is_zero() {
         return Err(ContractError::InvalidRedelegationAmount {});
@@ -84,7 +82,7 @@ pub fn execute(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::{LENDER, OUTSTANDING_DEBT};
+    use crate::state::{LENDER, OUTSTANDING_DEBT, OWNER};
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
     use cosmwasm_std::{Addr, Coin, Decimal, FullDelegation, Storage, Uint128, Uint256, Validator};
 

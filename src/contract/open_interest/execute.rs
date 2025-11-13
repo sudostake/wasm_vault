@@ -1,7 +1,8 @@
 use cosmwasm_std::{attr, DepsMut, Env, MessageInfo, Response};
 
 use crate::{
-    state::{COUNTER_OFFERS, OPEN_INTEREST, OWNER},
+    helpers::require_owner,
+    state::{COUNTER_OFFERS, OPEN_INTEREST},
     types::OpenInterest,
     ContractError,
 };
@@ -14,16 +15,13 @@ pub fn execute(
     info: MessageInfo,
     open_interest: OpenInterest,
 ) -> Result<Response, ContractError> {
-    let owner = OWNER.load(deps.storage)?;
-    if info.sender != owner {
-        return Err(ContractError::Unauthorized {});
-    }
+    require_owner(&deps, &info)?;
 
     if OPEN_INTEREST.load(deps.storage)?.is_some() {
         return Err(ContractError::OpenInterestAlreadyExists {});
     }
-
-    validate_open_interest(deps.as_ref(), &env, &open_interest)?;
+    let deps_ref = deps.as_ref();
+    validate_open_interest(&deps_ref, &env, &open_interest)?;
 
     OPEN_INTEREST.save(deps.storage, &Some(open_interest.clone()))?;
     COUNTER_OFFERS.clear(deps.storage);
