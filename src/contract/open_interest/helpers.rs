@@ -6,7 +6,7 @@ use std::collections::{btree_map::Entry, BTreeMap};
 use std::convert::TryFrom;
 
 use crate::{
-    helpers::{query_staked_balance, query_staking_rewards_for_denom},
+    helpers::collateral_lock_for_denom,
     state::{COUNTER_OFFERS, OUTSTANDING_DEBT},
     types::OpenInterest,
     ContractError,
@@ -26,7 +26,7 @@ pub(crate) fn validate_open_interest(
     }
 
     validate_repayment_limits(open_interest)?;
-    ensure_collateral_available(deps, env, &open_interest.collateral)?;
+    ensure_collateral_available(deps, env, open_interest)?;
 
     Ok(())
 }
@@ -51,42 +51,24 @@ fn validate_repayment_limits(open_interest: &OpenInterest) -> Result<(), Contrac
 fn ensure_collateral_available(
     deps: &Deps,
     env: &Env,
-    collateral: &Coin,
+    open_interest: &OpenInterest,
 ) -> Result<(), ContractError> {
-    let denom = collateral.denom.clone();
-    let requested = collateral.amount;
+    let denom = open_interest.collateral.denom.clone();
+    let requested = open_interest.collateral.amount;
 
     let available = query_available_balance(deps, env, &denom)?;
     if available >= requested {
         return Ok(());
     }
 
-    let bonded_denom = deps.querier.query_bonded_denom()?;
-    if denom != bonded_denom {
-        return Err(ContractError::InsufficientBalance {
-            denom,
-            available,
-            requested,
-        });
-    }
-
-    let remainder_after_balance = requested
-        .checked_sub(available)
-        .expect("available < requested ensures subtraction success");
-    let rewards = query_staking_rewards_for_denom(deps, env, &denom)?;
-    if rewards >= remainder_after_balance {
+    let locked = collateral_lock_for_denom(deps, env, &denom, Some(open_interest))?;
+    if available >= locked {
         return Ok(());
     }
 
-    let remainder_after_rewards = remainder_after_balance
-        .checked_sub(rewards)
-        .expect("rewards < remainder ensures subtraction success");
-    let staked = query_staked_balance(deps, env, &denom)?;
-    if staked >= remainder_after_rewards {
-        return Ok(());
-    }
+    let coverage = requested.checked_sub(locked).unwrap_or(Uint256::zero());
+    let total_available = available.checked_add(coverage).map_err(StdError::from)?;
 
-    let total_available = add_uint256(add_uint256(available, rewards)?, staked)?;
     Err(ContractError::InsufficientBalance {
         denom,
         available: total_available,
@@ -99,10 +81,6 @@ fn query_available_balance(deps: &Deps, env: &Env, denom: &str) -> StdResult<Uin
         .querier
         .query_balance(env.contract.address.clone(), denom.to_string())?;
     Ok(balance.amount)
-}
-
-fn add_uint256(lhs: Uint256, rhs: Uint256) -> StdResult<Uint256> {
-    lhs.checked_add(rhs).map_err(StdError::from)
 }
 
 pub(crate) fn open_interest_attributes(

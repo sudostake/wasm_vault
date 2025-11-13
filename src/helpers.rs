@@ -56,7 +56,7 @@ pub fn collateral_lock_for_denom(
     deps: &Deps,
     env: &Env,
     denom: &str,
-    open_interest: &Option<OpenInterest>,
+    open_interest: Option<&OpenInterest>,
 ) -> StdResult<Uint256> {
     let Some(interest) = open_interest else {
         return Ok(Uint256::zero());
