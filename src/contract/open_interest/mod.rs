@@ -11,5 +11,3 @@ pub use close::close;
 pub use execute::execute;
 pub use fund::fund;
 pub use repay::repay;
-
-pub(crate) use helpers::collateral_lock_for_denom;

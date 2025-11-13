@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Deps, DepsMut, Env, MessageInfo, StdError, StdResult, Uint256};
 
-use crate::{error::ContractError, state::OWNER};
+use crate::{error::ContractError, state::OWNER, types::OpenInterest};
 
 /// CwTemplateContract is a wrapper around Addr that provides a lot of helpers
 /// for working with this.
@@ -50,4 +50,30 @@ pub fn query_staked_balance(deps: &Deps, env: &Env, denom: &str) -> StdResult<Ui
             acc.checked_add(delegation.amount.amount)
                 .map_err(StdError::from)
         })
+}
+
+pub fn collateral_lock_for_denom(
+    deps: &Deps,
+    env: &Env,
+    denom: &str,
+    open_interest: &Option<OpenInterest>,
+) -> StdResult<Uint256> {
+    let Some(interest) = open_interest else {
+        return Ok(Uint256::zero());
+    };
+
+    if interest.collateral.denom != denom {
+        return Ok(Uint256::zero());
+    };
+
+    let bonded_denom = deps.querier.query_bonded_denom()?;
+    if denom != bonded_denom {
+        return Ok(interest.collateral.amount);
+    };
+
+    let rewards = query_staking_rewards_for_denom(deps, env, denom)?;
+    let staked = query_staked_balance(deps, env, denom)?;
+    let coverage = rewards.checked_add(staked).map_err(StdError::from)?;
+
+    Ok(interest.collateral.amount.saturating_sub(coverage))
 }

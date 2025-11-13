@@ -3,8 +3,7 @@ use cosmwasm_std::{
 };
 
 use crate::{
-    contract::open_interest::collateral_lock_for_denom,
-    helpers::require_owner,
+    helpers::{collateral_lock_for_denom, require_owner},
     state::{OPEN_INTEREST, OUTSTANDING_DEBT},
     types::OpenInterest,
     ContractError,

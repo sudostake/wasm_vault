@@ -105,32 +105,6 @@ fn add_uint256(lhs: Uint256, rhs: Uint256) -> StdResult<Uint256> {
     lhs.checked_add(rhs).map_err(StdError::from)
 }
 
-pub(crate) fn collateral_lock_for_denom(
-    deps: &Deps,
-    env: &Env,
-    denom: &str,
-    open_interest: &Option<OpenInterest>,
-) -> StdResult<Uint256> {
-    let Some(interest) = open_interest else {
-        return Ok(Uint256::zero());
-    };
-
-    if interest.collateral.denom != denom {
-        return Ok(Uint256::zero());
-    };
-
-    let bonded_denom = deps.querier.query_bonded_denom()?;
-    if denom != bonded_denom {
-        return Ok(interest.collateral.amount);
-    };
-
-    let rewards = query_staking_rewards_for_denom(deps, env, denom)?;
-    let staked = query_staked_balance(deps, env, denom)?;
-    let coverage = rewards.checked_add(staked).map_err(StdError::from)?;
-
-    Ok(interest.collateral.amount.saturating_sub(coverage))
-}
-
 pub(crate) fn open_interest_attributes(
     action: &'static str,
     open_interest: &OpenInterest,
