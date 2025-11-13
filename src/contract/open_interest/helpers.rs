@@ -61,12 +61,12 @@ fn ensure_collateral_available(
         return Ok(());
     }
 
-    let locked = collateral_lock_for_denom(deps, env, &denom, Some(open_interest))?;
+    let to_lock = collateral_lock_for_denom(deps, env, &denom, Some(open_interest))?;
     if available >= locked {
         return Ok(());
     }
 
-    let coverage = requested.checked_sub(locked).unwrap_or(Uint256::zero());
+    let coverage = requested.checked_sub(to_lock).unwrap_or(Uint256::zero());
     let total_available = available.checked_add(coverage).map_err(StdError::from)?;
 
     Err(ContractError::InsufficientBalance {
