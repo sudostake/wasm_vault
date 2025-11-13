@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    Addr, BankMsg, Coin, Deps, Env, MessageInfo, Order, StdError, StdResult, Storage, Uint128,
-    Uint256,
+    attr, Addr, Attribute, BankMsg, Coin, Deps, Env, MessageInfo, Order, StdError, StdResult,
+    Storage, Uint128, Uint256,
 };
 use std::collections::{btree_map::Entry, BTreeMap};
 use std::convert::TryFrom;
@@ -103,6 +103,60 @@ fn query_available_balance(deps: &Deps, env: &Env, denom: &str) -> StdResult<Uin
 
 fn add_uint256(lhs: Uint256, rhs: Uint256) -> StdResult<Uint256> {
     lhs.checked_add(rhs).map_err(StdError::from)
+}
+
+pub(crate) fn collateral_lock_for_denom(
+    deps: &Deps,
+    env: &Env,
+    denom: &str,
+    open_interest: &Option<OpenInterest>,
+) -> StdResult<Uint256> {
+    let Some(interest) = open_interest else {
+        return Ok(Uint256::zero());
+    };
+
+    if interest.collateral.denom != denom {
+        return Ok(Uint256::zero());
+    };
+
+    let bonded_denom = deps.querier.query_bonded_denom()?;
+    if denom != bonded_denom {
+        return Ok(interest.collateral.amount);
+    };
+
+    let rewards = query_staking_rewards_for_denom(deps, env, denom)?;
+    let staked = query_staked_balance(deps, env, denom)?;
+    let coverage = rewards.checked_add(staked).map_err(StdError::from)?;
+
+    Ok(interest.collateral.amount.saturating_sub(coverage))
+}
+
+pub(crate) fn open_interest_attributes(
+    action: &'static str,
+    open_interest: &OpenInterest,
+) -> Vec<Attribute> {
+    vec![
+        attr("action", action),
+        attr(
+            "liquidity_denom",
+            open_interest.liquidity_coin.denom.clone(),
+        ),
+        attr(
+            "liquidity_amount",
+            open_interest.liquidity_coin.amount.to_string(),
+        ),
+        attr("interest_denom", open_interest.interest_coin.denom.clone()),
+        attr(
+            "interest_amount",
+            open_interest.interest_coin.amount.to_string(),
+        ),
+        attr("collateral_denom", open_interest.collateral.denom.clone()),
+        attr(
+            "collateral_amount",
+            open_interest.collateral.amount.to_string(),
+        ),
+        attr("expiry_duration", open_interest.expiry_duration.to_string()),
+    ]
 }
 
 pub(crate) fn build_repayment_amounts(

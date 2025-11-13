@@ -1,4 +1,4 @@
-use cosmwasm_std::{attr, DepsMut, MessageInfo, Response};
+use cosmwasm_std::{DepsMut, MessageInfo, Response};
 
 use crate::{
     helpers::require_owner,
@@ -6,7 +6,7 @@ use crate::{
     ContractError,
 };
 
-use super::helpers::refund_counter_offer_escrow;
+use super::helpers::{open_interest_attributes, refund_counter_offer_escrow};
 
 pub fn close(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError> {
     require_owner(&deps, &info)?;
@@ -22,29 +22,11 @@ pub fn close(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError
     OPEN_INTEREST.save(deps.storage, &None)?;
     let refund_msgs = refund_counter_offer_escrow(deps.storage)?;
 
-    let response = Response::new().add_attributes([
-        attr("action", "close_open_interest"),
-        attr(
-            "liquidity_denom",
-            open_interest.liquidity_coin.denom.clone(),
-        ),
-        attr(
-            "liquidity_amount",
-            open_interest.liquidity_coin.amount.to_string(),
-        ),
-        attr("interest_denom", open_interest.interest_coin.denom.clone()),
-        attr(
-            "interest_amount",
-            open_interest.interest_coin.amount.to_string(),
-        ),
-        attr("collateral_denom", open_interest.collateral.denom.clone()),
-        attr(
-            "collateral_amount",
-            open_interest.collateral.amount.to_string(),
-        ),
-    ]);
+    let attrs = open_interest_attributes("close_open_interest", &open_interest);
 
-    Ok(response.add_messages(refund_msgs))
+    Ok(Response::new()
+        .add_attributes(attrs)
+        .add_messages(refund_msgs))
 }
 
 #[cfg(test)]

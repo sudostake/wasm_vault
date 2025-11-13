@@ -6,7 +6,9 @@ use crate::{
     ContractError,
 };
 
-use super::helpers::{refund_counter_offer_escrow, validate_liquidity_funding};
+use super::helpers::{
+    open_interest_attributes, refund_counter_offer_escrow, validate_liquidity_funding,
+};
 
 pub fn fund(
     deps: DepsMut,
@@ -34,19 +36,13 @@ pub fn fund(
     let refund_msgs = refund_counter_offer_escrow(deps.storage)?;
     let refund_count = refund_msgs.len();
 
-    Ok(Response::new().add_messages(refund_msgs).add_attributes([
-        attr("action", "fund_open_interest"),
-        attr("lender", lender.as_str()),
-        attr(
-            "liquidity_denom",
-            open_interest.liquidity_coin.denom.clone(),
-        ),
-        attr(
-            "liquidity_amount",
-            open_interest.liquidity_coin.amount.to_string(),
-        ),
-        attr("refunded_offers", refund_count.to_string()),
-    ]))
+    let mut attrs = open_interest_attributes("fund_open_interest", &open_interest);
+    attrs.push(attr("lender", lender.as_str()));
+    attrs.push(attr("refunded_offers", refund_count.to_string()));
+
+    Ok(Response::new()
+        .add_messages(refund_msgs)
+        .add_attributes(attrs))
 }
 
 #[cfg(test)]
