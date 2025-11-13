@@ -61,17 +61,23 @@ fn ensure_collateral_available(
         return Ok(());
     }
 
-    let to_lock = collateral_lock_for_denom(deps, env, &denom, Some(open_interest))?;
-    if available >= to_lock {
+    let required_lock = collateral_lock_for_denom(deps, env, &denom, Some(open_interest))?;
+    if available >= required_lock {
         return Ok(());
     }
 
-    let coverage = requested.checked_sub(to_lock).unwrap_or(Uint256::zero());
-    let total_available = available.checked_add(coverage).map_err(StdError::from)?;
+    let staking_coverage = requested.saturating_sub(required_lock);
+    let effective_balance = available
+        .checked_add(staking_coverage)
+        .map_err(StdError::from)?;
+
+    if effective_balance >= requested {
+        return Ok(());
+    }
 
     Err(ContractError::InsufficientBalance {
         denom,
-        available: total_available,
+        available: effective_balance,
         requested,
     })
 }
