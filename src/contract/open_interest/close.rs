@@ -61,7 +61,7 @@ mod tests {
         ContractError,
     };
     use cosmwasm_std::{
-        attr,
+        attr, coins,
         testing::{message_info, mock_dependencies, mock_env},
         BankMsg, Coin, Order,
     };
@@ -207,9 +207,14 @@ mod tests {
             sample_coin(200, "uatom"),
         );
 
+        let env = mock_env();
+        deps.querier
+            .bank
+            .update_balance(env.contract.address.as_str(), coins(200, "uatom"));
+
         execute(
             deps.as_mut(),
-            mock_env(),
+            env.clone(),
             message_info(&owner, &[]),
             initial_request.clone(),
         )
@@ -238,9 +243,13 @@ mod tests {
             sample_coin(300, "uatom"),
         );
 
+        deps.querier
+            .bank
+            .update_balance(env.contract.address.as_str(), coins(300, "uatom"));
+
         let response = execute(
             deps.as_mut(),
-            mock_env(),
+            env.clone(),
             message_info(&owner, &[]),
             reopened_request.clone(),
         )

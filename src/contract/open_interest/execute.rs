@@ -10,7 +10,7 @@ use super::helpers::validate_open_interest;
 
 pub fn execute(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     open_interest: OpenInterest,
 ) -> Result<Response, ContractError> {
@@ -23,7 +23,7 @@ pub fn execute(
         return Err(ContractError::OpenInterestAlreadyExists {});
     }
 
-    validate_open_interest(&open_interest)?;
+    validate_open_interest(deps.as_ref(), &env, &open_interest)?;
 
     OPEN_INTEREST.save(deps.storage, &Some(open_interest.clone()))?;
     COUNTER_OFFERS.clear(deps.storage);
@@ -61,6 +61,7 @@ mod tests {
         ContractError,
     };
     use cosmwasm_std::{
+        coins,
         testing::{message_info, mock_dependencies, mock_env},
         Coin, Uint128, Uint256,
     };
@@ -236,9 +237,14 @@ mod tests {
             sample_coin(200, "uatom"),
         );
 
+        let env = mock_env();
+        deps.querier
+            .bank
+            .update_balance(env.contract.address.as_str(), coins(200, "uatom"));
+
         let response = execute(
             deps.as_mut(),
-            mock_env(),
+            env.clone(),
             message_info(&owner, &[]),
             request.clone(),
         )

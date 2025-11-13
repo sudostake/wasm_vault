@@ -2,7 +2,7 @@ use cosmwasm_std::{coins, Addr, Coin, Uint128, Uint256};
 use cw_multi_test::{BasicApp, Executor};
 use std::convert::TryFrom;
 
-use crate::common::{mock_app, store_contract, DENOM};
+use crate::common::{mint_contract_collateral, mock_app, store_contract, DENOM};
 use wasm_vault::msg::{ExecuteMsg, InfoResponse, InstantiateMsg, QueryMsg};
 use wasm_vault::types::OpenInterest;
 
@@ -48,6 +48,8 @@ fn owner_can_open_interest_once() {
         collateral: Coin::new(2_000u128, "uatom"),
     };
 
+    mint_contract_collateral(&mut app, &contract_addr, &request.collateral);
+
     let response = app
         .execute_contract(
             owner.clone(),
@@ -77,12 +79,15 @@ fn owner_can_open_interest_once() {
 fn cannot_open_interest_twice() {
     let (mut app, contract_addr, owner) = instantiate_vault();
 
-    let msg = ExecuteMsg::OpenInterest(OpenInterest {
+    let open_interest = OpenInterest {
         liquidity_coin: Coin::new(500u128, "uusd"),
         interest_coin: Coin::new(10u128, "ujuno"),
         expiry_duration: 100,
         collateral: Coin::new(700u128, "uatom"),
-    });
+    };
+    mint_contract_collateral(&mut app, &contract_addr, &open_interest.collateral);
+
+    let msg = ExecuteMsg::OpenInterest(open_interest.clone());
 
     app.execute_contract(owner.clone(), contract_addr.clone(), &msg, &[])
         .expect("first open interest succeeds");
@@ -101,16 +106,19 @@ fn cannot_open_interest_twice() {
 fn rejects_invalid_inputs() {
     let (mut app, contract_addr, owner) = instantiate_vault();
 
+    let invalid_request = OpenInterest {
+        liquidity_coin: Coin::new(0u128, "uusd"),
+        interest_coin: Coin::new(10u128, "ujuno"),
+        expiry_duration: 0,
+        collateral: Coin::new(700u128, "uatom"),
+    };
+    mint_contract_collateral(&mut app, &contract_addr, &invalid_request.collateral);
+
     let err = app
         .execute_contract(
             owner.clone(),
             contract_addr.clone(),
-            &ExecuteMsg::OpenInterest(OpenInterest {
-                liquidity_coin: Coin::new(0u128, "uusd"),
-                interest_coin: Coin::new(10u128, "ujuno"),
-                expiry_duration: 0,
-                collateral: Coin::new(700u128, "uatom"),
-            }),
+            &ExecuteMsg::OpenInterest(invalid_request.clone()),
             &[],
         )
         .unwrap_err();
@@ -126,12 +134,15 @@ fn rejects_invalid_inputs() {
 fn owner_can_close_pending_open_interest() {
     let (mut app, contract_addr, owner) = instantiate_vault();
 
-    let msg = ExecuteMsg::OpenInterest(OpenInterest {
+    let open_interest = OpenInterest {
         liquidity_coin: Coin::new(1_000u128, "uusd"),
         interest_coin: Coin::new(50u128, "ujuno"),
         expiry_duration: 86_400u64,
         collateral: Coin::new(2_000u128, "uatom"),
-    });
+    };
+    mint_contract_collateral(&mut app, &contract_addr, &open_interest.collateral);
+
+    let msg = ExecuteMsg::OpenInterest(open_interest.clone());
 
     app.execute_contract(owner.clone(), contract_addr.clone(), &msg, &[])
         .expect("open interest succeeds");
@@ -187,6 +198,8 @@ fn lender_can_fund_open_interest_and_refund_counter_offers() {
         expiry_duration: 86_400u64,
         collateral: Coin::new(2_000u128, "ucollateral"),
     };
+
+    mint_contract_collateral(&mut app, &contract_addr, &open_interest.collateral);
 
     app.execute_contract(
         owner.clone(),
@@ -288,6 +301,8 @@ fn owner_can_repay_funded_open_interest() {
         expiry_duration: 86_400u64,
         collateral: Coin::new(2_000u128, "ucollateral"),
     };
+
+    mint_contract_collateral(&mut app, &contract_addr, &open_interest.collateral);
 
     app.execute_contract(
         owner.clone(),

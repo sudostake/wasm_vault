@@ -1,12 +1,12 @@
 use cosmwasm_std::{
     coins,
     testing::{MockApi, MockStorage},
-    Decimal, Decimal256, Empty, Validator,
+    Addr, Coin, Decimal, Decimal256, Empty, Validator,
 };
 use cw_multi_test::{
-    App, AppBuilder, BankKeeper, BasicApp, ContractWrapper, DistributionKeeper, FailingModule, Gov,
-    GovAcceptingModule, GovFailingModule, IbcFailingModule, StakeKeeper, StakingInfo,
-    StargateFailing, WasmKeeper,
+    App, AppBuilder, BankKeeper, BankSudo, BasicApp, ContractWrapper, DistributionKeeper,
+    FailingModule, Gov, GovAcceptingModule, GovFailingModule, IbcFailingModule, StakeKeeper,
+    StakingInfo, StargateFailing, WasmKeeper,
 };
 
 use wasm_vault::contract::{execute, instantiate, query};
@@ -100,4 +100,15 @@ fn build_app_with_gov<G: Gov>(gov: G) -> VaultApp<G> {
 pub fn store_contract<G: Gov>(app: &mut VaultApp<G>) -> u64 {
     let contract = ContractWrapper::new(execute, instantiate, query);
     app.store_code(Box::new(contract))
+}
+
+pub fn mint_contract_collateral(app: &mut BasicApp, contract_addr: &Addr, collateral: &Coin) {
+    app.sudo(
+        BankSudo::Mint {
+            to_address: contract_addr.to_string(),
+            amount: vec![collateral.clone()],
+        }
+        .into(),
+    )
+    .expect("mint collateral");
 }
