@@ -62,7 +62,7 @@ fn ensure_collateral_available(
     }
 
     let to_lock = collateral_lock_for_denom(deps, env, &denom, Some(open_interest))?;
-    if available >= locked {
+    if available >= to_lock {
         return Ok(());
     }
 
