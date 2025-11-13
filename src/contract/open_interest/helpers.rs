@@ -97,7 +97,7 @@ fn query_available_balance(deps: Deps, env: &Env, denom: &str) -> StdResult<Uint
     let balance = deps
         .querier
         .query_balance(env.contract.address.clone(), denom.to_string())?;
-    Ok(Uint256::from(balance.amount))
+    Ok(balance.amount)
 }
 
 fn query_staking_rewards_for_denom(deps: Deps, env: &Env, denom: &str) -> StdResult<Uint256> {
