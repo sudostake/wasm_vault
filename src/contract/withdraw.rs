@@ -22,11 +22,7 @@ pub fn execute(
         return Err(ContractError::InvalidWithdrawalAmount {});
     }
 
-    if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
-        if debt.denom == denom {
-            return Err(ContractError::OutstandingDebt { amount: debt });
-        }
-    }
+    let outstanding_debt = OUTSTANDING_DEBT.load(deps.storage)?;
 
     let requested = Uint256::from(amount);
     let balance = deps
@@ -34,10 +30,15 @@ pub fn execute(
         .query_balance(env.contract.address.clone(), denom.clone())?;
 
     let available = balance.amount;
-    if available < requested {
+    let withdrawable = match outstanding_debt {
+        Some(debt) if debt.denom == denom => available.saturating_sub(debt.amount),
+        _ => available,
+    };
+
+    if withdrawable < requested {
         return Err(ContractError::InsufficientBalance {
             denom: denom.clone(),
-            available,
+            available: withdrawable,
             requested,
         });
     }
@@ -126,9 +127,14 @@ mod tests {
             .save(deps.as_mut().storage, &Some(Coin::new(250u128, "ucosm")))
             .expect("debt stored");
 
+        let env = mock_env();
+        deps.querier
+            .bank
+            .update_balance(env.contract.address.as_str(), coins(200, "ucosm"));
+
         let err = execute(
             deps.as_mut(),
-            mock_env(),
+            env,
             message_info(&owner, &[]),
             "ucosm".to_string(),
             Uint128::new(10),
@@ -138,9 +144,50 @@ mod tests {
 
         assert!(matches!(
             err,
-            ContractError::OutstandingDebt { amount }
-                if amount == Coin::new(250u128, "ucosm")
+            ContractError::InsufficientBalance {
+                denom,
+                available,
+                requested,
+            } if denom == "ucosm"
+                && available == Uint256::zero()
+                && requested == Uint256::from(10u128)
         ));
+    }
+
+    #[test]
+    fn allows_withdraw_when_balance_exceeds_outstanding_debt() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
+
+        OUTSTANDING_DEBT
+            .save(deps.as_mut().storage, &Some(Coin::new(250u128, "ucosm")))
+            .expect("debt stored");
+
+        let env = mock_env();
+        deps.querier
+            .bank
+            .update_balance(env.contract.address.as_str(), coins(600, "ucosm"));
+
+        let response = execute(
+            deps.as_mut(),
+            env,
+            message_info(&owner, &[]),
+            "ucosm".to_string(),
+            Uint128::new(200),
+            None,
+        )
+        .expect("withdraw succeeds");
+
+        assert_eq!(response.messages.len(), 1);
+        let msg = response.messages[0].clone().msg;
+        match msg {
+            cosmwasm_std::CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
+                assert_eq!(to_address, owner.to_string());
+                assert_eq!(amount, vec![Coin::new(200u128, "ucosm")]);
+            }
+            _ => panic!("unexpected message"),
+        }
     }
 
     #[test]
