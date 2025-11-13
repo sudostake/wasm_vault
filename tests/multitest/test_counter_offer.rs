@@ -1,7 +1,7 @@
 use cosmwasm_std::{coins, Addr, Coin, Uint256};
 use cw_multi_test::{BasicApp, Executor};
 
-use crate::common::{mock_app, store_contract, DENOM};
+use crate::common::{mint_contract_collateral, mock_app, store_contract, DENOM};
 use wasm_vault::msg::{ExecuteMsg, InfoResponse, InstantiateMsg, QueryMsg};
 use wasm_vault::types::OpenInterest;
 
@@ -36,6 +36,8 @@ fn owner_accepts_counter_offer_and_refunds_others() {
         expiry_duration: 86_400u64,
         collateral: Coin::new(2_000u128, "ucollateral"),
     };
+
+    mint_contract_collateral(&mut app, &contract_addr, &open_interest.collateral);
 
     app.execute_contract(
         owner.clone(),
