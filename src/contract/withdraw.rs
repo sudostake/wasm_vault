@@ -464,7 +464,7 @@ fn available_to_withdraw(
     let balance = deps
         .querier
         .query_balance(env.contract.address.clone(), denom.to_string())?;
-    let available = balance.amount;
+    let available = Uint256::from(balance.amount);
 
     let collateral_lock = collateral_lock_for_denom(deps, env, denom, open_interest)?;
     let debt_requirement = match outstanding_debt {
