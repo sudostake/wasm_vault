@@ -4,7 +4,8 @@ use cosmwasm_std::{
 
 use crate::{
     error::ContractError,
-    state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OUTSTANDING_DEBT, OWNER},
+    helpers::require_owner,
+    state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OUTSTANDING_DEBT},
     types::OpenInterest,
 };
 
@@ -15,10 +16,7 @@ pub fn accept(
     proposer: String,
     expected_interest: OpenInterest,
 ) -> Result<Response, ContractError> {
-    let owner = OWNER.load(deps.storage)?;
-    if info.sender != owner {
-        return Err(ContractError::Unauthorized {});
-    }
+    require_owner(&deps, &info)?;
 
     OPEN_INTEREST
         .load(deps.storage)?

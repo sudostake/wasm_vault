@@ -2,7 +2,7 @@ use cosmwasm_std::{
     attr, DepsMut, Env, GovMsg, MessageInfo, Response, VoteOption, WeightedVoteOption,
 };
 
-use crate::{state::OWNER, ContractError};
+use crate::{helpers::require_owner, ContractError};
 
 pub fn execute_vote(
     deps: DepsMut,
@@ -11,10 +11,7 @@ pub fn execute_vote(
     proposal_id: u64,
     option: VoteOption,
 ) -> Result<Response, ContractError> {
-    let owner = OWNER.load(deps.storage)?;
-    if info.sender != owner {
-        return Err(ContractError::Unauthorized {});
-    }
+    require_owner(&deps, &info)?;
 
     Ok(Response::new()
         .add_message(GovMsg::Vote {
@@ -35,10 +32,7 @@ pub fn execute_weighted_vote(
     proposal_id: u64,
     options: Vec<WeightedVoteOption>,
 ) -> Result<Response, ContractError> {
-    let owner = OWNER.load(deps.storage)?;
-    if info.sender != owner {
-        return Err(ContractError::Unauthorized {});
-    }
+    require_owner(&deps, &info)?;
 
     let option_count = options.len().to_string();
 
@@ -58,6 +52,7 @@ pub fn execute_weighted_vote(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::OWNER;
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
     use cosmwasm_std::{Addr, Decimal, Storage};
 

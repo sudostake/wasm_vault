@@ -1,12 +1,9 @@
 use cosmwasm_std::{DepsMut, DistributionMsg, Env, MessageInfo, Response};
 
-use crate::{state::OWNER, ContractError};
+use crate::{helpers::require_owner, ContractError};
 
 pub fn execute(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
-    let owner = OWNER.load(deps.storage)?;
-    if info.sender != owner {
-        return Err(ContractError::Unauthorized {});
-    }
+    require_owner(&deps, &info)?;
 
     let delegations = deps
         .querier
@@ -32,7 +29,7 @@ pub fn execute(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, C
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::OUTSTANDING_DEBT;
+    use crate::state::{OUTSTANDING_DEBT, OWNER};
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
     use cosmwasm_std::{Addr, Coin, Decimal, DistributionMsg, FullDelegation, Storage, Validator};
 

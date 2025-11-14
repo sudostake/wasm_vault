@@ -1,12 +1,13 @@
-use cosmwasm_std::{attr, DepsMut, Env, MessageInfo, Response};
+use cosmwasm_std::{DepsMut, Env, MessageInfo, Response};
 
 use crate::{
-    state::{COUNTER_OFFERS, OPEN_INTEREST, OWNER},
+    helpers::require_owner,
+    state::{COUNTER_OFFERS, OPEN_INTEREST},
     types::OpenInterest,
     ContractError,
 };
 
-use super::helpers::validate_open_interest;
+use super::helpers::{open_interest_attributes, validate_open_interest};
 
 pub fn execute(
     deps: DepsMut,
@@ -14,42 +15,19 @@ pub fn execute(
     info: MessageInfo,
     open_interest: OpenInterest,
 ) -> Result<Response, ContractError> {
-    let owner = OWNER.load(deps.storage)?;
-    if info.sender != owner {
-        return Err(ContractError::Unauthorized {});
-    }
+    require_owner(&deps, &info)?;
 
     if OPEN_INTEREST.load(deps.storage)?.is_some() {
         return Err(ContractError::OpenInterestAlreadyExists {});
     }
-
-    validate_open_interest(deps.as_ref(), &env, &open_interest)?;
+    let deps_ref = deps.as_ref();
+    validate_open_interest(&deps_ref, &env, &open_interest)?;
 
     OPEN_INTEREST.save(deps.storage, &Some(open_interest.clone()))?;
     COUNTER_OFFERS.clear(deps.storage);
 
-    Ok(Response::new().add_attributes([
-        attr("action", "open_interest"),
-        attr(
-            "liquidity_denom",
-            open_interest.liquidity_coin.denom.clone(),
-        ),
-        attr(
-            "liquidity_amount",
-            open_interest.liquidity_coin.amount.to_string(),
-        ),
-        attr("interest_denom", open_interest.interest_coin.denom.clone()),
-        attr(
-            "interest_amount",
-            open_interest.interest_coin.amount.to_string(),
-        ),
-        attr("collateral_denom", open_interest.collateral.denom.clone()),
-        attr(
-            "collateral_amount",
-            open_interest.collateral.amount.to_string(),
-        ),
-        attr("expiry_duration", open_interest.expiry_duration.to_string()),
-    ]))
+    let attrs = open_interest_attributes("open_interest", &open_interest);
+    Ok(Response::new().add_attributes(attrs))
 }
 
 #[cfg(test)]

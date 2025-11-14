@@ -1,17 +1,15 @@
 use cosmwasm_std::{attr, BankMsg, Coin, DepsMut, Env, MessageInfo, Response};
 
 use crate::{
-    state::{LENDER, OPEN_INTEREST, OUTSTANDING_DEBT, OWNER},
+    helpers::require_owner,
+    state::{LENDER, OPEN_INTEREST, OUTSTANDING_DEBT},
     ContractError,
 };
 
-use super::helpers::build_repayment_amounts;
+use super::helpers::{build_repayment_amounts, open_interest_attributes};
 
 pub fn repay(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
-    let owner = OWNER.load(deps.storage)?;
-    if info.sender != owner {
-        return Err(ContractError::Unauthorized {});
-    }
+    require_owner(&deps, &info)?;
 
     if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
         return Err(ContractError::OutstandingDebt { amount: debt });
@@ -48,24 +46,11 @@ pub fn repay(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, Con
 
     OPEN_INTEREST.save(deps.storage, &None)?;
     LENDER.save(deps.storage, &None)?;
+    let mut attrs = open_interest_attributes("repay_open_interest", &open_interest);
+    attrs.push(attr("lender", lender.as_str()));
+
     let response = Response::new()
-        .add_attributes([
-            attr("action", "repay_open_interest"),
-            attr("lender", lender.as_str()),
-            attr(
-                "liquidity_denom",
-                open_interest.liquidity_coin.denom.clone(),
-            ),
-            attr(
-                "liquidity_amount",
-                open_interest.liquidity_coin.amount.to_string(),
-            ),
-            attr("interest_denom", open_interest.interest_coin.denom.clone()),
-            attr(
-                "interest_amount",
-                open_interest.interest_coin.amount.to_string(),
-            ),
-        ])
+        .add_attributes(attrs)
         .add_message(BankMsg::Send {
             to_address: lender.to_string(),
             amount: repayment_coins,

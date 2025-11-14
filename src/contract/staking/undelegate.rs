@@ -1,9 +1,6 @@
 use cosmwasm_std::{attr, Coin, DepsMut, Env, MessageInfo, Response, StakingMsg, Uint128, Uint256};
 
-use crate::{
-    state::{OPEN_INTEREST, OWNER},
-    ContractError,
-};
+use crate::{helpers::require_owner, state::OPEN_INTEREST, ContractError};
 
 pub fn execute(
     deps: DepsMut,
@@ -12,10 +9,7 @@ pub fn execute(
     validator: String,
     amount: Uint128,
 ) -> Result<Response, ContractError> {
-    let owner = OWNER.load(deps.storage)?;
-    if info.sender != owner {
-        return Err(ContractError::Unauthorized {});
-    }
+    require_owner(&deps, &info)?;
 
     if amount.is_zero() {
         return Err(ContractError::InvalidUndelegationAmount {});
@@ -63,7 +57,7 @@ pub fn execute(
 mod tests {
     use super::*;
     use crate::{
-        state::{OPEN_INTEREST, OUTSTANDING_DEBT},
+        state::{OPEN_INTEREST, OUTSTANDING_DEBT, OWNER},
         types::OpenInterest,
     };
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
