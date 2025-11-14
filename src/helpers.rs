@@ -52,7 +52,8 @@ pub fn query_staked_balance(deps: &Deps, env: &Env, denom: &str) -> StdResult<Ui
         })
 }
 
-pub fn collateral_lock_for_denom(
+/// Returns the minimum amount of collateral that must remain locked for `denom`.
+pub fn minimum_collateral_lock_for_denom(
     deps: &Deps,
     env: &Env,
     denom: &str,

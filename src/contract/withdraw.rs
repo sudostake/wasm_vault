@@ -3,7 +3,7 @@ use cosmwasm_std::{
 };
 
 use crate::{
-    helpers::{collateral_lock_for_denom, require_owner},
+    helpers::{minimum_collateral_lock_for_denom, require_owner},
     state::{OPEN_INTEREST, OUTSTANDING_DEBT},
     types::OpenInterest,
     ContractError,
@@ -463,7 +463,8 @@ fn available_to_withdraw(
         .query_balance(env.contract.address.clone(), denom.to_string())?;
     let available = balance.amount;
 
-    let collateral_lock = collateral_lock_for_denom(deps, env, denom, open_interest.as_ref())?;
+    let collateral_lock =
+        minimum_collateral_lock_for_denom(deps, env, denom, open_interest.as_ref())?;
     let debt_requirement = match outstanding_debt {
         Some(debt) if debt.denom == denom => debt.amount,
         _ => Uint256::zero(),
