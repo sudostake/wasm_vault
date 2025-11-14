@@ -360,13 +360,12 @@ mod tests {
 fn reserved_debt_for_denom(deps: &Deps, denom: &str) -> Result<Uint256, ContractError> {
     if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
         if debt.denom == denom {
-            let amount = debt.amount;
-
             let has_open_interest = OPEN_INTEREST.load(deps.storage)?.is_some();
             let lender_exists = LENDER.load(deps.storage)?.is_some();
 
             if has_open_interest && !lender_exists {
-                return Ok(amount);
+                // Reserve the outstanding debt only for counter-offer escrow (open interest without lender).
+                return Ok(debt.amount);
             }
 
             return Err(ContractError::OutstandingDebt { amount: debt });
