@@ -25,7 +25,7 @@ pub(crate) fn validate_open_interest(
         return Err(ContractError::InvalidExpiryDuration {});
     }
 
-    validate_repayment_limits(open_interest)?;
+    build_repayment_amounts(open_interest)?;
     ensure_collateral_available(deps, env, open_interest)?;
 
     Ok(())
@@ -40,11 +40,6 @@ fn validate_coin(coin: &Coin, field: &'static str) -> Result<(), ContractError> 
         return Err(ContractError::InvalidCoinDenom { field });
     }
 
-    Ok(())
-}
-
-fn validate_repayment_limits(open_interest: &OpenInterest) -> Result<(), ContractError> {
-    build_repayment_amounts(open_interest)?;
     Ok(())
 }
 
