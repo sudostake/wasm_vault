@@ -56,8 +56,7 @@ fn ensure_collateral_available(
         return Ok(());
     }
 
-    let required_lock =
-        minimum_collateral_lock_for_denom(deps, env, &denom, Some(open_interest))?;
+    let required_lock = minimum_collateral_lock_for_denom(deps, env, &denom, Some(open_interest))?;
     if available >= required_lock {
         return Ok(());
     }
