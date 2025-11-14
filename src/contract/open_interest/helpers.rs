@@ -6,7 +6,7 @@ use std::collections::{btree_map::Entry, BTreeMap};
 use std::convert::TryFrom;
 
 use crate::{
-    helpers::collateral_lock_for_denom,
+    helpers::minimum_collateral_lock_for_denom,
     state::{COUNTER_OFFERS, OUTSTANDING_DEBT},
     types::OpenInterest,
     ContractError,
@@ -56,7 +56,7 @@ fn ensure_collateral_available(
         return Ok(());
     }
 
-    let required_lock = collateral_lock_for_denom(deps, env, &denom, Some(open_interest))?;
+    let required_lock = minimum_collateral_lock_for_denom(deps, env, &denom, Some(open_interest))?;
     if available >= required_lock {
         return Ok(());
     }
