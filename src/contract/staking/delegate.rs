@@ -365,9 +365,7 @@ fn reserved_debt_for_denom(deps: &Deps, denom: &str) -> Result<Uint256, Contract
 
             if has_open_interest && !lender_exists {
                 // Reserve the outstanding debt only for counter-offer escrow (open interest without lender).
-                #[allow(clippy::useless_conversion)]
-                let amount: Uint256 = debt.amount.into();
-                return Ok(amount);
+                return Ok(debt.amount);
             }
 
             return Err(ContractError::OutstandingDebt { amount: debt });
