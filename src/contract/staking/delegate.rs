@@ -1,6 +1,12 @@
-use cosmwasm_std::{attr, Coin, DepsMut, Env, MessageInfo, Response, StakingMsg, Uint128, Uint256};
+use cosmwasm_std::{
+    attr, Coin, Deps, DepsMut, Env, MessageInfo, Response, StakingMsg, Uint128, Uint256,
+};
 
-use crate::{helpers::require_owner, state::OUTSTANDING_DEBT, ContractError};
+use crate::{
+    helpers::require_owner,
+    state::{LENDER, OPEN_INTEREST, OUTSTANDING_DEBT},
+    ContractError,
+};
 
 pub fn execute(
     deps: DepsMut,
@@ -19,20 +25,17 @@ pub fn execute(
     let denom = deps.querier.query_bonded_denom()?;
     let requested = Uint256::from(amount);
 
-    if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
-        if debt.denom == denom {
-            return Err(ContractError::OutstandingDebt { amount: debt });
-        }
-    }
+    let reserved_debt = reserved_debt_for_denom(&deps.as_ref(), &denom)?;
 
     let balance = deps
         .querier
         .query_balance(env.contract.address.clone(), denom.clone())?;
+    let available_after_reserved = balance.amount.saturating_sub(reserved_debt);
 
-    if balance.amount < requested {
+    if available_after_reserved < requested {
         return Err(ContractError::InsufficientBalance {
-            denom,
-            available: balance.amount,
+            denom: denom.clone(),
+            available: available_after_reserved,
             requested,
         });
     }
@@ -65,15 +68,22 @@ pub fn execute(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::{OUTSTANDING_DEBT, OWNER};
+    use crate::{
+        state::{LENDER, OPEN_INTEREST, OUTSTANDING_DEBT, OWNER},
+        types::OpenInterest,
+    };
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
-    use cosmwasm_std::{coins, Addr, Coin, Decimal, Storage, Uint128, Validator};
+    use cosmwasm_std::{coins, Addr, Coin, Decimal, Storage, Uint128, Uint256, Validator};
 
     fn setup_owner_and_zero_debt(storage: &mut dyn Storage, owner: &Addr) {
         OWNER.save(storage, owner).expect("owner stored");
         OUTSTANDING_DEBT
             .save(storage, &None)
             .expect("zero debt stored");
+        LENDER.save(storage, &None).expect("lender cleared");
+        OPEN_INTEREST
+            .save(storage, &None)
+            .expect("open interest cleared");
     }
 
     #[test]
@@ -204,6 +214,105 @@ mod tests {
     }
 
     #[test]
+    fn allows_delegation_with_counter_offer_outstanding_debt() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
+
+        let denom = "ucosm";
+        let open_interest = OpenInterest {
+            liquidity_coin: Coin::new(400u128, denom),
+            interest_coin: Coin::new(20u128, "ujuno"),
+            expiry_duration: 86_400u64,
+            collateral: Coin::new(200u128, "uatom"),
+        };
+
+        OPEN_INTEREST
+            .save(deps.as_mut().storage, &Some(open_interest))
+            .expect("open interest stored");
+
+        OUTSTANDING_DEBT
+            .save(deps.as_mut().storage, &Some(Coin::new(150u128, denom)))
+            .expect("debt stored");
+
+        let env = mock_env();
+        deps.querier
+            .bank
+            .update_balance(env.contract.address.as_str(), coins(600, denom));
+
+        let validator = deps.api.addr_make("validator");
+        let validator_addr = validator.clone().into_string();
+        let validator_obj = Validator::create(
+            validator_addr.clone(),
+            Decimal::percent(5),
+            Decimal::percent(10),
+            Decimal::percent(1),
+        );
+
+        deps.querier.staking.update(denom, &[validator_obj], &[]);
+
+        let info = message_info(&owner, &[]);
+        let amount = Uint128::new(200);
+
+        let response =
+            execute(deps.as_mut(), env, info, validator_addr.clone(), amount).expect("succeeds");
+
+        assert_eq!(response.messages.len(), 1);
+    }
+
+    #[test]
+    fn fails_when_reserved_debt_blocks_delegation() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        setup_owner_and_zero_debt(deps.as_mut().storage, &owner);
+
+        let denom = "ucosm";
+        let open_interest = OpenInterest {
+            liquidity_coin: Coin::new(400u128, denom),
+            interest_coin: Coin::new(20u128, "ujuno"),
+            expiry_duration: 86_400u64,
+            collateral: Coin::new(200u128, "uatom"),
+        };
+
+        OPEN_INTEREST
+            .save(deps.as_mut().storage, &Some(open_interest))
+            .expect("open interest stored");
+
+        OUTSTANDING_DEBT
+            .save(deps.as_mut().storage, &Some(Coin::new(450u128, denom)))
+            .expect("debt stored");
+
+        let env = mock_env();
+        deps.querier
+            .bank
+            .update_balance(env.contract.address.as_str(), coins(500, denom));
+
+        let validator = deps.api.addr_make("validator");
+        let validator_addr = validator.clone().into_string();
+        let validator_obj = Validator::create(
+            validator_addr.clone(),
+            Decimal::percent(5),
+            Decimal::percent(10),
+            Decimal::percent(1),
+        );
+
+        deps.querier.staking.update(denom, &[validator_obj], &[]);
+
+        let info = message_info(&owner, &[]);
+        let amount = Uint128::new(100);
+
+        let err = execute(deps.as_mut(), env, info, validator_addr, amount).unwrap_err();
+
+        assert!(matches!(
+            err,
+            ContractError::InsufficientBalance { denom, available, requested }
+                if denom == "ucosm"
+                    && available == Uint256::from(50u128)
+                    && requested == Uint256::from(100u128)
+        ));
+    }
+
+    #[test]
     fn creates_delegate_message() {
         let mut deps = mock_dependencies();
         let owner = deps.api.addr_make("owner");
@@ -246,4 +355,22 @@ mod tests {
             _ => panic!("unexpected message"),
         }
     }
+}
+
+fn reserved_debt_for_denom(deps: &Deps, denom: &str) -> Result<Uint256, ContractError> {
+    if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
+        if debt.denom == denom {
+            let has_open_interest = OPEN_INTEREST.load(deps.storage)?.is_some();
+            let lender_exists = LENDER.load(deps.storage)?.is_some();
+
+            if has_open_interest && !lender_exists {
+                // Reserve the outstanding debt only for counter-offer escrow (open interest without lender).
+                return Ok(debt.amount);
+            }
+
+            return Err(ContractError::OutstandingDebt { amount: debt });
+        }
+    }
+
+    Ok(Uint256::zero())
 }
