@@ -123,3 +123,99 @@ fn non_owner_cannot_undelegate() {
 
     assert!(err.to_string().contains("Unauthorized"));
 }
+
+#[test]
+fn undelegate_zero_amount_fails() {
+    let mut app = mock_app();
+    let code_id = store_contract(&mut app);
+
+    let owner = app.api().addr_make("creator");
+    let contract_addr = app
+        .instantiate_contract(
+            code_id,
+            owner.clone(),
+            &InstantiateMsg {
+                owner: Some(owner.to_string()),
+            },
+            &[],
+            "vault",
+            None,
+        )
+        .expect("instantiate succeeds");
+
+    let err = app
+        .execute_contract(
+            owner.clone(),
+            contract_addr,
+            &ExecuteMsg::Undelegate {
+                validator: app.api().addr_make("validator").into_string(),
+                amount: Uint128::zero(),
+            },
+            &[],
+        )
+        .unwrap_err();
+
+    assert!(err
+        .to_string()
+        .contains("Undelegation amount must be greater than zero"));
+}
+
+#[test]
+fn undelegate_more_than_delegated_fails() {
+    let mut app = mock_app();
+    let code_id = store_contract(&mut app);
+
+    let owner = app.api().addr_make("creator");
+    let contract_addr = app
+        .instantiate_contract(
+            code_id,
+            owner.clone(),
+            &InstantiateMsg {
+                owner: Some(owner.to_string()),
+            },
+            &[],
+            "vault",
+            None,
+        )
+        .expect("instantiate succeeds");
+
+    app.execute(
+        owner.clone(),
+        BankMsg::Send {
+            to_address: contract_addr.to_string(),
+            amount: coins(300, DENOM),
+        }
+        .into(),
+    )
+    .expect("funding succeeds");
+
+    let validator = app.api().addr_make("validator").into_string();
+    let delegate_amount = Uint128::new(150);
+
+    app.execute_contract(
+        owner.clone(),
+        contract_addr.clone(),
+        &ExecuteMsg::Delegate {
+            validator: validator.clone(),
+            amount: delegate_amount,
+        },
+        &[],
+    )
+    .expect("delegate succeeds");
+
+    let err = app
+        .execute_contract(
+            owner.clone(),
+            contract_addr,
+            &ExecuteMsg::Undelegate {
+                validator: validator.clone(),
+                amount: Uint128::new(200),
+            },
+            &[],
+        )
+        .unwrap_err();
+
+    assert!(err
+        .to_string()
+        .contains("Insufficient delegated balance for validator"));
+}

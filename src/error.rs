@@ -111,7 +111,4 @@ pub enum ContractError {
 
     #[error("Counter offer payload for {proposer} does not match stored terms")]
     CounterOfferMismatch { proposer: String },
-
-    #[error("Cannot undelegate while an open interest is active")]
-    UndelegateWhileOpenInterestActive {},
 }
