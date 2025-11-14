@@ -1,4 +1,6 @@
-use cosmwasm_std::{attr, Coin, DepsMut, Env, MessageInfo, Response, StakingMsg, Uint128, Uint256};
+use cosmwasm_std::{
+    attr, Coin, Deps, DepsMut, Env, MessageInfo, Response, StakingMsg, Uint128, Uint256,
+};
 
 use crate::{
     helpers::require_owner,
@@ -23,7 +25,7 @@ pub fn execute(
     let denom = deps.querier.query_bonded_denom()?;
     let requested = Uint256::from(amount);
 
-    let reserved_debt = reserved_debt_for_denom(&deps, &denom)?;
+    let reserved_debt = reserved_debt_for_denom(&deps.as_ref(), &denom)?;
 
     let balance = deps
         .querier
@@ -355,7 +357,7 @@ mod tests {
     }
 }
 
-fn reserved_debt_for_denom(deps: &DepsMut, denom: &str) -> Result<Uint256, ContractError> {
+fn reserved_debt_for_denom(deps: &Deps, denom: &str) -> Result<Uint256, ContractError> {
     if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
         if debt.denom == denom {
             let amount = debt.amount;
