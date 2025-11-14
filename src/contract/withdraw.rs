@@ -5,7 +5,6 @@ use cosmwasm_std::{
 use crate::{
     helpers::{minimum_collateral_lock_for_denom, require_owner},
     state::{OPEN_INTEREST, OUTSTANDING_DEBT},
-    types::OpenInterest,
     ContractError,
 };
 use std::cmp::max;
@@ -24,13 +23,10 @@ pub fn execute(
         return Err(ContractError::InvalidWithdrawalAmount {});
     }
 
-    let outstanding_debt = OUTSTANDING_DEBT.load(deps.storage)?;
-    let open_interest = OPEN_INTEREST.load(deps.storage)?;
     let deps_ref = deps.as_ref();
 
     let requested = Uint256::from(amount);
-    let withdrawable =
-        available_to_withdraw(&deps_ref, &env, &denom, &outstanding_debt, &open_interest)?;
+    let withdrawable = available_to_withdraw(&deps_ref, &env, &denom)?;
 
     if withdrawable < requested {
         return Err(ContractError::InsufficientBalance {
@@ -451,13 +447,10 @@ mod tests {
     }
 }
 
-fn available_to_withdraw(
-    deps: &Deps,
-    env: &Env,
-    denom: &str,
-    outstanding_debt: &Option<Coin>,
-    open_interest: &Option<OpenInterest>,
-) -> StdResult<Uint256> {
+fn available_to_withdraw(deps: &Deps, env: &Env, denom: &str) -> StdResult<Uint256> {
+    let outstanding_debt = OUTSTANDING_DEBT.load(deps.storage)?;
+    let open_interest = OPEN_INTEREST.load(deps.storage)?;
+
     let balance = deps
         .querier
         .query_balance(env.contract.address.clone(), denom.to_string())?;
