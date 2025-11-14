@@ -358,7 +358,7 @@ mod tests {
 fn reserved_debt_for_denom(deps: &DepsMut, denom: &str) -> Result<Uint256, ContractError> {
     if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
         if debt.denom == denom {
-            let amount = Uint256::from(debt.amount);
+            let amount = debt.amount;
 
             let has_open_interest = OPEN_INTEREST.load(deps.storage)?.is_some();
             let lender_exists = LENDER.load(deps.storage)?.is_some();
