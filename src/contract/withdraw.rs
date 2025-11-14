@@ -5,7 +5,6 @@ use cosmwasm_std::{
 use crate::{
     helpers::{minimum_collateral_lock_for_denom, require_owner},
     state::{OPEN_INTEREST, OUTSTANDING_DEBT},
-    types::OpenInterest,
     ContractError,
 };
 use std::cmp::max;
