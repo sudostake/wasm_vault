@@ -225,7 +225,7 @@ pub fn liquidate(
         })?;
         messages.push(CosmosMsg::Bank(BankMsg::Send {
             to_address: ctx.lender.to_string(),
-            amount: vec![Coin::new(payout_value, ctx.denom.clone())],
+            amount: vec![Coin::new(payout_value.u128(), ctx.denom.clone())],
         }));
     }
 
