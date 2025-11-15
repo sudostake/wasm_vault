@@ -56,7 +56,7 @@ impl LiquidationContext {
         })
     }
 
-    fn remaining_outstanding(&self, deps: &DepsMut) -> Result<Uint256, ContractError> {
+    fn get_outstanding_amount(&self, deps: &DepsMut) -> Result<Uint256, ContractError> {
         let outstanding_debt = OUTSTANDING_DEBT.may_load(deps.storage)?.flatten();
         match outstanding_debt {
             Some(debt) => {
@@ -206,18 +206,14 @@ pub fn liquidate(
     info: MessageInfo,
 ) -> Result<Response, ContractError> {
     let ctx = LiquidationContext::load(&deps, &env, &info)?;
-    let remaining = ctx.remaining_outstanding(&deps)?;
+    let remaining = ctx.get_outstanding_amount(&deps)?;
     let mut messages = Vec::new();
 
     let (total_available, rewards_claimed, mut fund_messages, delegations) =
         ctx.collect_funds(&deps, &env, remaining)?;
     messages.append(&mut fund_messages);
 
-    let payout_amount = if total_available < remaining {
-        total_available
-    } else {
-        remaining
-    };
+    let payout_amount = total_available.min(remaining);
 
     if payout_amount > Uint256::zero() {
         let payout_value = Uint128::try_from(payout_amount).map_err(|_| {
