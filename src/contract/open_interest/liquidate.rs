@@ -218,7 +218,7 @@ pub fn liquidate(
 
     if payout_amount > Uint256::zero() {
         let payout_value = Uint128::try_from(payout_amount).map_err(|_| {
-            ContractError::RepaymentAmountOverflow {
+            ContractError::LiquidationAmountOverflow {
                 denom: ctx.denom.clone(),
                 requested: payout_amount,
             }
