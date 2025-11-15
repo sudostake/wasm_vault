@@ -65,9 +65,15 @@ impl LiquidationContext {
                         "Outstanding debt denom mismatch",
                     )));
                 }
-                Ok(debt.amount)
+                #[allow(clippy::useless_conversion)]
+                let debt_amount = Uint256::from(debt.amount);
+                Ok(debt_amount)
             }
-            None => Ok(self.open_interest.collateral.amount),
+            None => {
+                #[allow(clippy::useless_conversion)]
+                let collateral_amount = Uint256::from(self.open_interest.collateral.amount);
+                Ok(collateral_amount)
+            }
         }
     }
 
@@ -82,10 +88,12 @@ impl LiquidationContext {
         remaining: Uint256,
     ) -> Result<(Uint256, Uint256, Vec<CosmosMsg>, Vec<Delegation>), ContractError> {
         let mut messages = Vec::new();
-        let mut total_available = deps
+        let balance = deps
             .querier
             .query_balance(self.contract_addr.clone(), self.denom.clone())?
             .amount;
+        #[allow(clippy::useless_conversion)]
+        let mut total_available: Uint256 = Uint256::from(balance);
         let mut delegations = Vec::new();
         let mut rewards_claimed = Uint256::zero();
 
@@ -131,24 +139,21 @@ impl LiquidationContext {
         }
 
         let mut messages = Vec::new();
-        let mut left = remaining;
+        let mut remaining_to_undelegate = remaining;
         let mut undelegated = Uint256::zero();
 
         for delegation in delegations {
-            if left.is_zero() {
+            if remaining_to_undelegate.is_zero() {
                 break;
             }
 
-            let stake_amount = delegation.amount.amount;
+            #[allow(clippy::useless_conversion)]
+            let stake_amount = Uint256::from(delegation.amount.amount);
             if stake_amount.is_zero() {
                 continue;
             }
 
-            let amount = if stake_amount < left {
-                stake_amount
-            } else {
-                left
-            };
+            let amount = stake_amount.min(remaining_to_undelegate);
 
             let coin_amount =
                 Uint128::try_from(amount).map_err(|_| ContractError::RepaymentAmountOverflow {
@@ -161,9 +166,10 @@ impl LiquidationContext {
                 amount: Coin::new(coin_amount, self.denom.clone()),
             }));
 
-            left = left.checked_sub(amount).map_err(|_| {
-                ContractError::Std(StdError::msg("liquidation undelegate overflow"))
-            })?;
+            remaining_to_undelegate =
+                remaining_to_undelegate.checked_sub(amount).map_err(|_| {
+                    ContractError::Std(StdError::msg("liquidation undelegate overflow"))
+                })?;
             undelegated = undelegated.checked_add(amount).map_err(|_| {
                 ContractError::Std(StdError::msg("liquidation undelegated amount overflow"))
             })?;
