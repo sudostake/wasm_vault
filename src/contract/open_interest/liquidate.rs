@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    attr, BankMsg, Coin, CosmosMsg, Delegation, DepsMut, DistributionMsg, Env, MessageInfo,
+    attr, BankMsg, Coin, CosmosMsg, Delegation, Deps, DepsMut, DistributionMsg, Env, MessageInfo,
     Response, StakingMsg, StdError, Uint128, Uint256,
 };
 
@@ -61,9 +61,10 @@ impl LiquidationContext {
         match outstanding_debt {
             Some(debt) => {
                 if debt.denom != self.denom {
-                    return Err(ContractError::Std(StdError::msg(
-                        "Outstanding debt denom mismatch",
-                    )));
+                    return Err(ContractError::Std(StdError::msg(format!(
+                        "Outstanding debt denom mismatch: expected {}, got {}",
+                        self.denom, debt.denom
+                    ))));
                 }
                 #[allow(clippy::useless_conversion)]
                 let debt_amount = Uint256::from(debt.amount);
@@ -83,7 +84,7 @@ impl LiquidationContext {
 
     fn collect_funds(
         &self,
-        deps: &DepsMut,
+        deps: &Deps,
         env: &Env,
         remaining: Uint256,
     ) -> Result<(Uint256, Uint256, Vec<CosmosMsg>, Vec<Delegation>), ContractError> {
@@ -102,7 +103,7 @@ impl LiquidationContext {
                 .querier
                 .query_all_delegations(self.contract_addr.clone())?;
 
-            let reward_amount = query_staking_rewards_for_denom(&deps.as_ref(), env, &self.denom)?;
+            let reward_amount = query_staking_rewards_for_denom(deps, env, &self.denom)?;
             if !reward_amount.is_zero() {
                 for delegation in &delegations {
                     messages.push(CosmosMsg::Distribution(
@@ -124,7 +125,7 @@ impl LiquidationContext {
 
     fn schedule_undelegations(
         &self,
-        deps: &DepsMut,
+        deps: &Deps,
         remaining: Uint256,
         mut delegations: Vec<Delegation>,
     ) -> Result<(Vec<CosmosMsg>, Uint256), ContractError> {
@@ -210,7 +211,7 @@ pub fn liquidate(
     let mut messages = Vec::new();
 
     let (total_available, rewards_claimed, mut fund_messages, delegations) =
-        ctx.collect_funds(&deps, &env, remaining)?;
+        ctx.collect_funds(&deps.as_ref(), &env, remaining)?;
     messages.append(&mut fund_messages);
 
     let payout_amount = total_available.min(remaining);
@@ -241,7 +242,7 @@ pub fn liquidate(
     }
 
     let (undelegate_msgs, undelegated_amount) =
-        ctx.schedule_undelegations(&deps, remaining_after_payout, delegations)?;
+        ctx.schedule_undelegations(&deps.as_ref(), remaining_after_payout, delegations)?;
     messages.extend(undelegate_msgs);
 
     let settled_remaining = remaining_after_payout
