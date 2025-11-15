@@ -390,3 +390,116 @@ fn owner_can_repay_funded_open_interest() {
         Uint128::try_from(balance.amount).expect("contract balance fits into Uint128");
     assert_eq!(balance_amount.u128(), 0);
 }
+
+#[test]
+fn liquidate_claims_rewards_before_payout() {
+    let (mut app, contract_addr, owner) = instantiate_vault();
+
+    let open_interest = OpenInterest {
+        liquidity_coin: Coin::new(2_000u128, DENOM),
+        interest_coin: Coin::new(50u128, "uinterest"),
+        expiry_duration: 86_400u64,
+        collateral: Coin::new(1_000u128, DENOM),
+    };
+
+    let liquidity_amount = Uint128::try_from(open_interest.liquidity_coin.amount)
+        .expect("liquidity amount fits in Uint128");
+    let collateral_amount = Uint128::try_from(open_interest.collateral.amount)
+        .expect("collateral amount fits in Uint128");
+
+    mint_contract_collateral(&mut app, &contract_addr, &open_interest.collateral);
+
+    app.execute_contract(
+        owner.clone(),
+        contract_addr.clone(),
+        &ExecuteMsg::OpenInterest(open_interest.clone()),
+        &[],
+    )
+    .expect("open interest set");
+
+    let lender = app.api().addr_make("lender");
+    app.send_tokens(
+        owner.clone(),
+        lender.clone(),
+        &coins(liquidity_amount.u128(), DENOM),
+    )
+    .expect("fund lender");
+
+    app.execute_contract(
+        lender.clone(),
+        contract_addr.clone(),
+        &ExecuteMsg::FundOpenInterest(open_interest.clone()),
+        &[open_interest.liquidity_coin.clone()],
+    )
+    .expect("funding succeeds");
+
+    let validators = app
+        .wrap()
+        .query_all_validators()
+        .expect("validator query succeeds");
+    let validator = validators
+        .get(0)
+        .expect("at least one validator")
+        .address
+        .clone();
+
+    app.execute_contract(
+        owner.clone(),
+        contract_addr.clone(),
+        &ExecuteMsg::Delegate {
+            validator,
+            amount: collateral_amount,
+        },
+        &[],
+    )
+    .expect("delegate succeeds");
+
+    app.update_block(|block| {
+        block.height += 1_000;
+        block.time = block
+            .time
+            .plus_seconds(open_interest.expiry_duration + 1_000_000);
+    });
+
+    let lender_balance_before = app
+        .wrap()
+        .query_balance(lender.clone(), DENOM)
+        .expect("lender balance before liquidate")
+        .amount;
+
+    let response = app
+        .execute_contract(
+            owner.clone(),
+            contract_addr.clone(),
+            &ExecuteMsg::LiquidateOpenInterest {},
+            &[],
+        )
+        .expect("liquidate succeeds");
+
+    assert!(response.events.iter().any(|event| {
+        event.ty == "wasm"
+            && event
+                .attributes
+                .iter()
+                .any(|attr| attr.key == "action" && attr.value == "liquidate_open_interest")
+    }));
+
+    let lender_balance_after = app
+        .wrap()
+        .query_balance(lender.clone(), DENOM)
+        .expect("lender balance after liquidate")
+        .amount;
+
+    assert!(
+        lender_balance_after > lender_balance_before,
+        "lender should receive funds during liquidation"
+    );
+
+    let info: InfoResponse = app
+        .wrap()
+        .query_wasm_smart(contract_addr.clone(), &QueryMsg::Info)
+        .expect("info query succeeds");
+
+    assert!(info.open_interest.is_none());
+    assert!(info.lender.is_none());
+}
