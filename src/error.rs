@@ -103,6 +103,9 @@ pub enum ContractError {
     #[error("Repayment requirement for {denom} exceeds Uint128 range: {requested}")]
     RepaymentAmountOverflow { denom: String, requested: Uint256 },
 
+    #[error("Undelegation amount for {denom} exceeds Uint128 range: {requested}")]
+    UndelegationAmountOverflow { denom: String, requested: Uint256 },
+
     #[error("Proposer already has an active counter offer")]
     CounterOfferAlreadyExists {},
 

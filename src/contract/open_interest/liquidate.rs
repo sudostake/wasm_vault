@@ -155,11 +155,12 @@ impl LiquidationContext {
 
             let amount = stake_amount.min(remaining_to_undelegate);
 
-            let coin_amount =
-                Uint128::try_from(amount).map_err(|_| ContractError::RepaymentAmountOverflow {
+            let coin_amount = Uint128::try_from(amount).map_err(|_| {
+                ContractError::UndelegationAmountOverflow {
                     denom: self.denom.clone(),
                     requested: amount,
-                })?;
+                }
+            })?;
 
             messages.push(CosmosMsg::Staking(StakingMsg::Undelegate {
                 validator: delegation.validator.clone(),
@@ -247,7 +248,10 @@ pub fn liquidate(
         ctx.schedule_undelegations(&deps, remaining_after_payout, delegations)?;
     messages.extend(undelegate_msgs);
 
-    ctx.finalize_state(&mut deps, remaining_after_payout)?;
+    let settled_remaining = remaining_after_payout
+        .checked_sub(undelegated_amount)
+        .map_err(|_| ContractError::Std(StdError::msg("settled remaining underflow")))?;
+    ctx.finalize_state(&mut deps, settled_remaining)?;
 
     let mut attrs = open_interest_attributes("liquidate_open_interest", &ctx.open_interest);
     attrs.push(attr("lender", ctx.lender.as_str()));
@@ -264,8 +268,8 @@ pub fn liquidate(
         attrs.push(attr("undelegated_amount", undelegated_amount.to_string()));
     }
 
-    if !remaining_after_payout.is_zero() {
-        attrs.push(attr("outstanding_debt", remaining_after_payout.to_string()));
+    if !settled_remaining.is_zero() {
+        attrs.push(attr("outstanding_debt", settled_remaining.to_string()));
     }
 
     let mut response = Response::new().add_attributes(attrs);
