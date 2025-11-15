@@ -1,7 +1,11 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Addr, Deps, DepsMut, Env, MessageInfo, StdError, StdResult, Uint256};
 
-use crate::{error::ContractError, state::OWNER, types::OpenInterest};
+use crate::{
+    error::ContractError,
+    state::{LENDER, OWNER},
+    types::OpenInterest,
+};
 
 /// CwTemplateContract is a wrapper around Addr that provides a lot of helpers
 /// for working with this.
@@ -21,6 +25,22 @@ pub fn require_owner(deps: &DepsMut, info: &MessageInfo) -> Result<Addr, Contrac
     } else {
         Ok(owner)
     }
+}
+
+pub fn require_owner_or_lender(deps: &DepsMut, info: &MessageInfo) -> Result<Addr, ContractError> {
+    let owner = OWNER.load(deps.storage)?;
+    if info.sender == owner {
+        return Ok(owner);
+    }
+
+    let lender = LENDER.may_load(deps.storage)?.flatten();
+    if let Some(lender_addr) = lender {
+        if info.sender == lender_addr {
+            return Ok(lender_addr);
+        }
+    }
+
+    Err(ContractError::Unauthorized {})
 }
 
 pub fn query_staking_rewards_for_denom(deps: &Deps, env: &Env, denom: &str) -> StdResult<Uint256> {

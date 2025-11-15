@@ -62,6 +62,9 @@ pub enum ContractError {
     #[error("No lender is currently set for the open interest")]
     NoLender {},
 
+    #[error("Open interest has not yet expired")]
+    OpenInterestNotExpired {},
+
     #[error("A lender has already been set")]
     LenderAlreadySet {},
 
@@ -99,6 +102,12 @@ pub enum ContractError {
 
     #[error("Repayment requirement for {denom} exceeds Uint128 range: {requested}")]
     RepaymentAmountOverflow { denom: String, requested: Uint256 },
+
+    #[error("Liquidation payout for {denom} exceeds Uint128 range: {requested}")]
+    LiquidationAmountOverflow { denom: String, requested: Uint256 },
+
+    #[error("Undelegation amount for {denom} exceeds Uint128 range: {requested}")]
+    UndelegationAmountOverflow { denom: String, requested: Uint256 },
 
     #[error("Proposer already has an active counter offer")]
     CounterOfferAlreadyExists {},

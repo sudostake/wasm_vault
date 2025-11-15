@@ -1,14 +1,18 @@
 use cosmwasm_std::{Addr, Coin, Storage};
 
 use crate::{
-    state::{LENDER, OPEN_INTEREST, OUTSTANDING_DEBT, OWNER},
+    state::{LENDER, OPEN_INTEREST, OPEN_INTEREST_EXPIRY, OUTSTANDING_DEBT, OWNER},
     types::OpenInterest,
 };
+use cosmwasm_std::Timestamp;
 
 pub fn setup(storage: &mut dyn Storage, owner: &Addr) {
     OWNER.save(storage, owner).expect("owner stored");
     LENDER.save(storage, &None).expect("lender cleared");
     OUTSTANDING_DEBT.save(storage, &None).expect("debt cleared");
+    OPEN_INTEREST_EXPIRY
+        .save(storage, &None)
+        .expect("expiry cleared");
     OPEN_INTEREST
         .save(storage, &None)
         .expect("open interest cleared");
@@ -27,6 +31,9 @@ pub fn setup_active_open_interest(
     LENDER
         .save(storage, &Some(lender.clone()))
         .expect("lender stored");
+    OPEN_INTEREST_EXPIRY
+        .save(storage, &Some(Timestamp::from_seconds(0)))
+        .expect("expiry stored");
 }
 
 pub fn sample_coin(amount: u128, denom: &str) -> Coin {

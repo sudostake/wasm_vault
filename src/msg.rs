@@ -51,6 +51,7 @@ pub enum ExecuteMsg {
     CancelCounterOffer {},
     CloseOpenInterest {},
     RepayOpenInterest {},
+    LiquidateOpenInterest {},
 }
 
 #[cw_serde]

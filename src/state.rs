@@ -1,5 +1,5 @@
 use crate::types::OpenInterest;
-use cosmwasm_std::{Addr, Coin};
+use cosmwasm_std::{Addr, Coin, Timestamp};
 use cw_storage_plus::{Item, Map};
 
 /// Maximum number of counter offers a vault will record simultaneously.
@@ -9,12 +9,13 @@ pub const OWNER: Item<Addr> = Item::new("owner");
 pub const LENDER: Item<Option<Addr>> = Item::new("lender");
 pub const OUTSTANDING_DEBT: Item<Option<Coin>> = Item::new("outstanding_debt");
 pub const OPEN_INTEREST: Item<Option<OpenInterest>> = Item::new("open_interest");
+pub const OPEN_INTEREST_EXPIRY: Item<Option<Timestamp>> = Item::new("open_interest_expiry");
 pub const COUNTER_OFFERS: Map<&Addr, OpenInterest> = Map::new("counter_offers");
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cosmwasm_std::{testing::mock_dependencies, Coin, Order};
+    use cosmwasm_std::{testing::mock_dependencies, Coin, Order, Timestamp};
 
     #[test]
     fn owner_item_persists_addresses() {
@@ -105,6 +106,34 @@ mod tests {
             .expect("may_load succeeds");
 
         assert!(missing.is_none());
+    }
+
+    #[test]
+    fn open_interest_expiry_defaults_to_none() {
+        let mut deps = mock_dependencies();
+        let stored = OPEN_INTEREST_EXPIRY
+            .may_load(deps.as_ref().storage)
+            .expect("may_load succeeds");
+
+        assert!(stored.is_none());
+
+        let expiry = Timestamp::from_seconds(100);
+        OPEN_INTEREST_EXPIRY
+            .save(deps.as_mut().storage, &Some(expiry))
+            .expect("save succeeds");
+
+        let loaded = OPEN_INTEREST_EXPIRY
+            .load(deps.as_ref().storage)
+            .expect("load succeeds");
+        assert_eq!(loaded, Some(expiry));
+
+        OPEN_INTEREST_EXPIRY
+            .save(deps.as_mut().storage, &None)
+            .expect("cleared");
+        let cleared = OPEN_INTEREST_EXPIRY
+            .load(deps.as_ref().storage)
+            .expect("load succeeds");
+        assert!(cleared.is_none());
     }
 
     #[test]

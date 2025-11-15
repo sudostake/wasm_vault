@@ -57,6 +57,7 @@ pub fn execute(
         ExecuteMsg::CancelCounterOffer {} => counter_offer::cancel(deps, env, info),
         ExecuteMsg::CloseOpenInterest {} => open_interest::close(deps, info),
         ExecuteMsg::RepayOpenInterest {} => open_interest::repay(deps, env, info),
+        ExecuteMsg::LiquidateOpenInterest {} => open_interest::liquidate(deps, env, info),
     }
 }
 
@@ -324,6 +325,25 @@ mod tests {
             .load(deps.as_ref().storage)
             .expect("state loaded");
         assert!(stored.is_none());
+    }
+
+    #[test]
+    fn execute_liquidate_requires_active_open_interest() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        OWNER
+            .save(deps.as_mut().storage, &owner)
+            .expect("owner stored");
+
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&owner, &[]),
+            ExecuteMsg::LiquidateOpenInterest {},
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, ContractError::NoOpenInterest {}));
     }
 
     #[test]
