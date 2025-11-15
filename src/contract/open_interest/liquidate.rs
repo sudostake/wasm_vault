@@ -33,9 +33,11 @@ impl LiquidationContext {
             .load(deps.storage)?
             .ok_or(ContractError::NoLender {})?;
 
-        let expiry = OPEN_INTEREST_EXPIRY
-            .load(deps.storage)?
-            .expect("open interest expiry missing despite lender being set");
+        let expiry = OPEN_INTEREST_EXPIRY.load(deps.storage)?.ok_or_else(|| {
+            ContractError::Std(StdError::msg(
+                "open interest expiry missing despite lender being set",
+            ))
+        })?;
 
         if env.block.time < expiry {
             return Err(ContractError::OpenInterestNotExpired {});
