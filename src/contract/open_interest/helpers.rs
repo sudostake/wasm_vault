@@ -242,11 +242,11 @@ pub(crate) fn get_outstanding_amount(
                     state.denom, debt.denom
                 ))));
             }
-            let debt_amount = Uint256::from(debt.amount);
+            let debt_amount = debt.amount;
             Ok(debt_amount)
         }
         None => {
-            let collateral_amount = Uint256::from(state.open_interest.collateral.amount);
+            let collateral_amount = state.open_interest.collateral.amount;
             Ok(collateral_amount)
         }
     }
@@ -262,7 +262,7 @@ pub(crate) fn collect_funds(
         .querier
         .query_balance(state.contract_addr.clone(), state.denom.clone())?
         .amount;
-    let mut total_available: Uint256 = Uint256::from(balance);
+    let mut total_available = balance;
     let mut reward_claim_messages = Vec::new();
     let mut rewards_claimed = Uint256::zero();
 
@@ -333,7 +333,7 @@ pub(crate) fn schedule_undelegations(
             break;
         }
 
-        let stake_amount = Uint256::from(delegation.amount.amount);
+        let stake_amount = delegation.amount.amount;
         if stake_amount.is_zero() {
             continue;
         }
