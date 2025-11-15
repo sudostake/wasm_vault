@@ -63,9 +63,9 @@ impl LiquidationContext {
                         "Outstanding debt denom mismatch",
                     )));
                 }
-                Ok(Uint256::from(debt.amount))
+                Ok(debt.amount)
             }
-            None => Ok(Uint256::from(self.open_interest.collateral.amount)),
+            None => Ok(self.open_interest.collateral.amount),
         }
     }
 
@@ -80,11 +80,10 @@ impl LiquidationContext {
         remaining: Uint256,
     ) -> Result<(Uint256, Uint256, Vec<CosmosMsg>, Vec<Delegation>), ContractError> {
         let mut messages = Vec::new();
-        let mut total_available = Uint256::from(
-            deps.querier
-                .query_balance(self.contract_addr.clone(), self.denom.clone())?
-                .amount,
-        );
+        let mut total_available = deps
+            .querier
+            .query_balance(self.contract_addr.clone(), self.denom.clone())?
+            .amount;
         let mut delegations = Vec::new();
         let mut rewards_claimed = Uint256::zero();
 
@@ -138,7 +137,7 @@ impl LiquidationContext {
                 break;
             }
 
-            let stake_amount = Uint256::from(delegation.amount.amount);
+            let stake_amount = delegation.amount.amount;
             if stake_amount.is_zero() {
                 continue;
             }
