@@ -1,7 +1,7 @@
 use cosmwasm_std::{attr, DepsMut, Env, MessageInfo, Response};
 
 use crate::{
-    state::{LENDER, OPEN_INTEREST},
+    state::{LENDER, OPEN_INTEREST, OPEN_INTEREST_EXPIRY},
     types::OpenInterest,
     ContractError,
 };
@@ -12,7 +12,7 @@ use super::helpers::{
 
 pub fn fund(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     expected_interest: OpenInterest,
 ) -> Result<Response, ContractError> {
@@ -32,6 +32,8 @@ pub fn fund(
 
     let lender = info.sender;
     LENDER.save(deps.storage, &Some(lender.clone()))?;
+    let expiry = env.block.time.plus_seconds(open_interest.expiry_duration);
+    OPEN_INTEREST_EXPIRY.save(deps.storage, &Some(expiry))?;
 
     let refund_msgs = refund_counter_offer_escrow(deps.storage)?;
     let refund_count = refund_msgs.len();
@@ -50,11 +52,11 @@ mod tests {
     use super::*;
     use crate::{
         contract::open_interest::test_helpers::{build_open_interest, sample_coin, setup},
-        state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OUTSTANDING_DEBT},
+        state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OPEN_INTEREST_EXPIRY, OUTSTANDING_DEBT},
         ContractError,
     };
     use cosmwasm_std::{
-        attr,
+        attr, coins,
         testing::{message_info, mock_dependencies, mock_env},
         BankMsg, Coin, Order, Uint256,
     };
@@ -271,5 +273,43 @@ mod tests {
             .load(deps.as_ref().storage)
             .expect("debt query succeeds");
         assert!(debt.is_none());
+    }
+
+    #[test]
+    fn fund_records_expiry_timestamp() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        setup(deps.as_mut().storage, &owner);
+
+        let request = build_open_interest(
+            sample_coin(100, "uusd"),
+            sample_coin(5, "uinterest"),
+            1_000,
+            sample_coin(200, "uatom"),
+        );
+        OPEN_INTEREST
+            .save(deps.as_mut().storage, &Some(request.clone()))
+            .expect("open interest stored");
+
+        let env = mock_env();
+        deps.querier
+            .bank
+            .update_balance(env.contract.address.as_str(), coins(100, "uusd"));
+
+        let lender_addr = deps.api.addr_make("lender");
+        fund(
+            deps.as_mut(),
+            env.clone(),
+            message_info(&lender_addr, &[request.liquidity_coin.clone()]),
+            request.clone(),
+        )
+        .expect("fund succeeds");
+
+        let stored_expiry = OPEN_INTEREST_EXPIRY
+            .load(deps.as_ref().storage)
+            .expect("expiry loaded")
+            .expect("expiry set");
+        let expected = env.block.time.plus_seconds(request.expiry_duration);
+        assert_eq!(stored_expiry, expected);
     }
 }

@@ -5,13 +5,13 @@ use cosmwasm_std::{
 use crate::{
     error::ContractError,
     helpers::require_owner,
-    state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OUTSTANDING_DEBT},
+    state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OPEN_INTEREST_EXPIRY, OUTSTANDING_DEBT},
     types::OpenInterest,
 };
 
 pub fn accept(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     proposer: String,
     expected_interest: OpenInterest,
@@ -54,9 +54,11 @@ pub fn accept(
 
     COUNTER_OFFERS.clear(deps.storage);
 
+    let expiry = env.block.time.plus_seconds(accepted_offer.expiry_duration);
     LENDER.save(deps.storage, &Some(lender_addr.clone()))?;
     OPEN_INTEREST.save(deps.storage, &Some(accepted_offer.clone()))?;
     OUTSTANDING_DEBT.save(deps.storage, &None)?;
+    OPEN_INTEREST_EXPIRY.save(deps.storage, &Some(expiry))?;
 
     let mut response = Response::new().add_attributes([
         attr("action", "accept_counter_offer"),

@@ -2,7 +2,7 @@ use cosmwasm_std::{DepsMut, MessageInfo, Response};
 
 use crate::{
     helpers::require_owner,
-    state::{LENDER, OPEN_INTEREST},
+    state::{LENDER, OPEN_INTEREST, OPEN_INTEREST_EXPIRY},
     ContractError,
 };
 
@@ -20,6 +20,7 @@ pub fn close(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError
         .ok_or(ContractError::NoOpenInterest {})?;
 
     OPEN_INTEREST.save(deps.storage, &None)?;
+    OPEN_INTEREST_EXPIRY.save(deps.storage, &None)?;
     let refund_msgs = refund_counter_offer_escrow(deps.storage)?;
 
     let attrs = open_interest_attributes("close_open_interest", &open_interest);
