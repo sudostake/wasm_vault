@@ -165,7 +165,7 @@ impl LiquidationContext {
 
             messages.push(CosmosMsg::Staking(StakingMsg::Undelegate {
                 validator: delegation.validator.clone(),
-                amount: Coin::new(coin_amount, self.denom.clone()),
+                amount: Coin::new(coin_amount.u128(), self.denom.clone()),
             }));
 
             remaining_to_undelegate =
