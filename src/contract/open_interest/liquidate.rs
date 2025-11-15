@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    attr, BankMsg, Coin, CosmosMsg, Delegation, Deps, DepsMut, DistributionMsg, Env, MessageInfo,
-    Response, StakingMsg, StdError, Uint128, Uint256,
+    attr, Attribute, BankMsg, Coin, CosmosMsg, Delegation, Deps, DepsMut, DistributionMsg, Env,
+    MessageInfo, Response, StakingMsg, StdError, Uint128, Uint256,
 };
 
 use crate::{
@@ -18,6 +18,12 @@ struct LiquidationContext {
     denom: String,
     contract_addr: cosmwasm_std::Addr,
     bonded_denom: String,
+}
+
+struct CollectedFunds {
+    available: Uint256,
+    rewards_claimed: Uint256,
+    reward_claim_messages: Vec<CosmosMsg>,
 }
 
 impl LiquidationContext {
@@ -82,31 +88,31 @@ impl LiquidationContext {
         self.denom == self.bonded_denom
     }
 
+    /// Gather the available balance, rewards, and any reward-claim messages needed for liquidation.
     fn collect_funds(
         &self,
         deps: &Deps,
         env: &Env,
         remaining: Uint256,
-    ) -> Result<(Uint256, Uint256, Vec<CosmosMsg>, Vec<Delegation>), ContractError> {
-        let mut messages = Vec::new();
+    ) -> Result<CollectedFunds, ContractError> {
         let balance = deps
             .querier
             .query_balance(self.contract_addr.clone(), self.denom.clone())?
             .amount;
         #[allow(clippy::useless_conversion)]
         let mut total_available: Uint256 = Uint256::from(balance);
-        let mut delegations = Vec::new();
+        let mut reward_claim_messages = Vec::new();
         let mut rewards_claimed = Uint256::zero();
 
         if self.is_bonded() && total_available < remaining {
-            delegations = deps
+            let delegations = deps
                 .querier
                 .query_all_delegations(self.contract_addr.clone())?;
 
             let reward_amount = query_staking_rewards_for_denom(deps, env, &self.denom)?;
             if !reward_amount.is_zero() {
-                for delegation in &delegations {
-                    messages.push(CosmosMsg::Distribution(
+                for delegation in delegations {
+                    reward_claim_messages.push(CosmosMsg::Distribution(
                         DistributionMsg::WithdrawDelegatorReward {
                             validator: delegation.validator.clone(),
                         },
@@ -120,24 +126,40 @@ impl LiquidationContext {
             })?;
         }
 
-        Ok((total_available, rewards_claimed, messages, delegations))
+        Ok(CollectedFunds {
+            available: total_available,
+            rewards_claimed,
+            reward_claim_messages,
+        })
     }
 
+    fn payout_message(&self, payout_amount: Uint256) -> Result<CosmosMsg, ContractError> {
+        let payout_value = Uint128::try_from(payout_amount).map_err(|_| {
+            ContractError::LiquidationAmountOverflow {
+                denom: self.denom.clone(),
+                requested: payout_amount,
+            }
+        })?;
+
+        Ok(CosmosMsg::Bank(BankMsg::Send {
+            to_address: self.lender.to_string(),
+            amount: vec![Coin::new(payout_value.u128(), self.denom.clone())],
+        }))
+    }
+
+    /// Request undelegations until the remaining amount is fulfilled (or delegations are exhausted).
     fn schedule_undelegations(
         &self,
         deps: &Deps,
         remaining: Uint256,
-        mut delegations: Vec<Delegation>,
     ) -> Result<(Vec<CosmosMsg>, Uint256), ContractError> {
         if remaining.is_zero() {
             return Ok((Vec::new(), Uint256::zero()));
         }
 
-        if delegations.is_empty() {
-            delegations = deps
-                .querier
-                .query_all_delegations(self.contract_addr.clone())?;
-        }
+        let delegations = deps
+            .querier
+            .query_all_delegations(self.contract_addr.clone())?;
 
         let mut messages = Vec::new();
         let mut remaining_to_undelegate = remaining;
@@ -180,6 +202,7 @@ impl LiquidationContext {
         Ok((messages, undelegated))
     }
 
+    /// Update open interest storage depending on whether any debt remains after liquidation.
     fn finalize_state(&self, deps: &mut DepsMut, remaining: Uint256) -> Result<(), ContractError> {
         if remaining.is_zero() {
             OUTSTANDING_DEBT.save(deps.storage, &None)?;
@@ -201,6 +224,14 @@ impl LiquidationContext {
     }
 }
 
+fn push_nonzero_attr(attrs: &mut Vec<Attribute>, key: &'static str, value: Uint256) {
+    if value.is_zero() {
+        return;
+    }
+
+    attrs.push(attr(key, value.to_string()));
+}
+
 pub fn liquidate(
     mut deps: DepsMut,
     env: Env,
@@ -208,25 +239,19 @@ pub fn liquidate(
 ) -> Result<Response, ContractError> {
     let ctx = LiquidationContext::load(&deps, &env, &info)?;
     let remaining = ctx.get_outstanding_amount(&deps)?;
+
     let mut messages = Vec::new();
+    let collected = ctx.collect_funds(&deps.as_ref(), &env, remaining)?;
+    let CollectedFunds {
+        available,
+        rewards_claimed,
+        reward_claim_messages,
+    } = collected;
+    messages.extend(reward_claim_messages);
 
-    let (total_available, rewards_claimed, mut fund_messages, delegations) =
-        ctx.collect_funds(&deps.as_ref(), &env, remaining)?;
-    messages.append(&mut fund_messages);
-
-    let payout_amount = total_available.min(remaining);
-
-    if payout_amount > Uint256::zero() {
-        let payout_value = Uint128::try_from(payout_amount).map_err(|_| {
-            ContractError::LiquidationAmountOverflow {
-                denom: ctx.denom.clone(),
-                requested: payout_amount,
-            }
-        })?;
-        messages.push(CosmosMsg::Bank(BankMsg::Send {
-            to_address: ctx.lender.to_string(),
-            amount: vec![Coin::new(payout_value.u128(), ctx.denom.clone())],
-        }));
+    let payout_amount = available.min(remaining);
+    if !payout_amount.is_zero() {
+        messages.push(ctx.payout_message(payout_amount)?);
     }
 
     let remaining_after_payout = remaining
@@ -236,13 +261,13 @@ pub fn liquidate(
     if !remaining_after_payout.is_zero() && !ctx.is_bonded() {
         return Err(ContractError::InsufficientBalance {
             denom: ctx.denom.clone(),
-            available: total_available,
+            available,
             requested: remaining,
         });
     }
 
     let (undelegate_msgs, undelegated_amount) =
-        ctx.schedule_undelegations(&deps.as_ref(), remaining_after_payout, delegations)?;
+        ctx.schedule_undelegations(&deps.as_ref(), remaining_after_payout)?;
     messages.extend(undelegate_msgs);
 
     let settled_remaining = remaining_after_payout
@@ -252,22 +277,10 @@ pub fn liquidate(
 
     let mut attrs = open_interest_attributes("liquidate_open_interest", &ctx.open_interest);
     attrs.push(attr("lender", ctx.lender.as_str()));
-
-    if payout_amount > Uint256::zero() {
-        attrs.push(attr("payout_amount", payout_amount.to_string()));
-    }
-
-    if !rewards_claimed.is_zero() {
-        attrs.push(attr("rewards_claimed", rewards_claimed.to_string()));
-    }
-
-    if !undelegated_amount.is_zero() {
-        attrs.push(attr("undelegated_amount", undelegated_amount.to_string()));
-    }
-
-    if !settled_remaining.is_zero() {
-        attrs.push(attr("outstanding_debt", settled_remaining.to_string()));
-    }
+    push_nonzero_attr(&mut attrs, "payout_amount", payout_amount);
+    push_nonzero_attr(&mut attrs, "rewards_claimed", rewards_claimed);
+    push_nonzero_attr(&mut attrs, "undelegated_amount", undelegated_amount);
+    push_nonzero_attr(&mut attrs, "outstanding_debt", settled_remaining);
 
     let mut response = Response::new().add_attributes(attrs);
     for msg in messages {
