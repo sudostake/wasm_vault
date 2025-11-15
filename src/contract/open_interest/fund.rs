@@ -55,8 +55,9 @@ mod tests {
         state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OPEN_INTEREST_EXPIRY, OUTSTANDING_DEBT},
         ContractError,
     };
+    use cosmwasm_std::coins;
     use cosmwasm_std::{
-        attr, coins,
+        attr,
         testing::{message_info, mock_dependencies, mock_env},
         BankMsg, Coin, Order, Uint256,
     };
