@@ -2,11 +2,11 @@ use cosmwasm_std::{attr, BankMsg, Coin, DepsMut, Env, MessageInfo, Response};
 
 use crate::{
     helpers::require_owner,
-    state::{LENDER, OPEN_INTEREST, OPEN_INTEREST_EXPIRY, OUTSTANDING_DEBT},
+    state::{LENDER, OPEN_INTEREST, OUTSTANDING_DEBT},
     ContractError,
 };
 
-use super::helpers::{build_repayment_amounts, open_interest_attributes};
+use super::helpers::{build_repayment_amounts, clear_active_lender, open_interest_attributes};
 
 pub fn repay(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, ContractError> {
     require_owner(&deps, &info)?;
@@ -45,8 +45,7 @@ pub fn repay(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, Con
     }
 
     OPEN_INTEREST.save(deps.storage, &None)?;
-    LENDER.save(deps.storage, &None)?;
-    OPEN_INTEREST_EXPIRY.save(deps.storage, &None)?;
+    clear_active_lender(deps.storage)?;
     let mut attrs = open_interest_attributes("repay_open_interest", &open_interest);
     attrs.push(attr("lender", lender.as_str()));
 
