@@ -38,7 +38,7 @@ pub fn instantiate(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::COUNTER_OFFERS;
+    use crate::state::{COUNTER_OFFERS, LENDER};
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
 
     #[test]

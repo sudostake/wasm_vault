@@ -184,7 +184,7 @@ pub(crate) struct LiquidationState {
     pub(crate) bonded_denom: String,
 }
 
-pub(crate) fn set_active_lender(
+pub fn set_active_lender(
     storage: &mut dyn Storage,
     lender: Addr,
     expiry: Timestamp,
@@ -194,7 +194,7 @@ pub(crate) fn set_active_lender(
     Ok(())
 }
 
-pub(crate) fn clear_active_lender(storage: &mut dyn Storage) -> StdResult<()> {
+pub fn clear_active_lender(storage: &mut dyn Storage) -> StdResult<()> {
     LENDER.save(storage, &None)?;
     OPEN_INTEREST_EXPIRY.save(storage, &None)?;
     Ok(())
@@ -214,7 +214,8 @@ pub(crate) fn load_liquidation_state(
     require_owner_or_lender(deps, info)?;
 
     let open_interest = OPEN_INTEREST
-        .load(deps.storage)?
+        .may_load(deps.storage)?
+        .flatten()
         .ok_or(ContractError::NoOpenInterest {})?;
 
     let lender = LENDER

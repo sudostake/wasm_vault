@@ -1,7 +1,7 @@
 use cosmwasm_std::{attr, DepsMut, Env, MessageInfo, Response};
 
 use crate::{
-    state::{LENDER, OPEN_INTEREST, OPEN_INTEREST_EXPIRY},
+    state::{LENDER, OPEN_INTEREST},
     types::OpenInterest,
     ContractError,
 };
