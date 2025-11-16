@@ -11,5 +11,6 @@ pub mod test_helpers;
 pub use close::close;
 pub use execute::execute;
 pub use fund::fund;
+pub use helpers::{clear_active_lender, set_active_lender};
 pub use liquidate::liquidate;
 pub use repay::repay;

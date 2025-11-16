@@ -3,9 +3,10 @@ use cosmwasm_std::entry_point;
 use cosmwasm_std::{DepsMut, Env, MessageInfo, Response};
 use cw2::set_contract_version;
 
+use crate::contract::open_interest::clear_active_lender;
 use crate::error::ContractError;
 use crate::msg::InstantiateMsg;
-use crate::state::{LENDER, OPEN_INTEREST, OPEN_INTEREST_EXPIRY, OUTSTANDING_DEBT, OWNER};
+use crate::state::{OPEN_INTEREST, OUTSTANDING_DEBT, OWNER};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:wasm_vault";
@@ -25,10 +26,9 @@ pub fn instantiate(
         None => info.sender.clone(),
     };
     OWNER.save(deps.storage, &owner)?;
-    LENDER.save(deps.storage, &None)?;
     OUTSTANDING_DEBT.save(deps.storage, &None)?;
     OPEN_INTEREST.save(deps.storage, &None)?;
-    OPEN_INTEREST_EXPIRY.save(deps.storage, &None)?;
+    clear_active_lender(deps.storage)?;
 
     Ok(Response::new()
         .add_attribute("method", "instantiate")

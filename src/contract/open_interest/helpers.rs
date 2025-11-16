@@ -1,6 +1,6 @@
 use cosmwasm_std::{
     attr, Addr, Attribute, BankMsg, Coin, CosmosMsg, Deps, DepsMut, DistributionMsg, Env,
-    MessageInfo, Order, StakingMsg, StdError, StdResult, Storage, Uint128, Uint256,
+    MessageInfo, Order, StakingMsg, StdError, StdResult, Storage, Timestamp, Uint128, Uint256,
 };
 use std::collections::{btree_map::Entry, BTreeMap};
 use std::convert::TryFrom;
@@ -184,6 +184,22 @@ pub(crate) struct LiquidationState {
     pub(crate) bonded_denom: String,
 }
 
+pub(crate) fn set_active_lender(
+    storage: &mut dyn Storage,
+    lender: Addr,
+    expiry: Timestamp,
+) -> StdResult<()> {
+    LENDER.save(storage, &Some(lender))?;
+    OPEN_INTEREST_EXPIRY.save(storage, &Some(expiry))?;
+    Ok(())
+}
+
+pub(crate) fn clear_active_lender(storage: &mut dyn Storage) -> StdResult<()> {
+    LENDER.save(storage, &None)?;
+    OPEN_INTEREST_EXPIRY.save(storage, &None)?;
+    Ok(())
+}
+
 pub(crate) struct CollectedFunds {
     pub(crate) available: Uint256,
     pub(crate) rewards_claimed: Uint256,
@@ -198,19 +214,16 @@ pub(crate) fn load_liquidation_state(
     require_owner_or_lender(deps, info)?;
 
     let open_interest = OPEN_INTEREST
-        .may_load(deps.storage)?
-        .flatten()
+        .load(deps.storage)?
         .ok_or(ContractError::NoOpenInterest {})?;
 
     let lender = LENDER
         .load(deps.storage)?
         .ok_or(ContractError::NoLender {})?;
 
-    let expiry = OPEN_INTEREST_EXPIRY.load(deps.storage)?.ok_or_else(|| {
-        ContractError::Std(StdError::msg(
-            "open interest expiry missing despite lender being set",
-        ))
-    })?;
+    let expiry = OPEN_INTEREST_EXPIRY
+        .load(deps.storage)?
+        .expect("open interest expiry missing despite lender being set");
 
     if env.block.time < expiry {
         return Err(ContractError::OpenInterestNotExpired {});
@@ -370,8 +383,7 @@ pub(crate) fn finalize_state(
     if remaining.is_zero() {
         OUTSTANDING_DEBT.save(deps.storage, &None)?;
         OPEN_INTEREST.save(deps.storage, &None)?;
-        LENDER.save(deps.storage, &None)?;
-        OPEN_INTEREST_EXPIRY.save(deps.storage, &None)?;
+        clear_active_lender(deps.storage)?;
         return Ok(());
     }
 

@@ -7,7 +7,8 @@ use crate::{
 };
 
 use super::helpers::{
-    open_interest_attributes, refund_counter_offer_escrow, validate_liquidity_funding,
+    open_interest_attributes, refund_counter_offer_escrow, set_active_lender,
+    validate_liquidity_funding,
 };
 
 pub fn fund(
@@ -31,9 +32,8 @@ pub fn fund(
     validate_liquidity_funding(&info, &open_interest.liquidity_coin)?;
 
     let lender = info.sender;
-    LENDER.save(deps.storage, &Some(lender.clone()))?;
     let expiry = env.block.time.plus_seconds(open_interest.expiry_duration);
-    OPEN_INTEREST_EXPIRY.save(deps.storage, &Some(expiry))?;
+    set_active_lender(deps.storage, lender.clone(), expiry)?;
 
     let refund_msgs = refund_counter_offer_escrow(deps.storage)?;
     let refund_count = refund_msgs.len();
