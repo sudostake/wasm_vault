@@ -214,7 +214,8 @@ pub(crate) fn load_liquidation_state(
     require_owner_or_lender(deps, info)?;
 
     let open_interest = OPEN_INTEREST
-        .load(deps.storage)?
+        .may_load(deps.storage)?
+        .flatten()
         .ok_or(ContractError::NoOpenInterest {})?;
 
     let lender = LENDER
@@ -246,7 +247,7 @@ pub(crate) fn get_outstanding_amount(
     state: &LiquidationState,
     deps: &DepsMut,
 ) -> Result<Uint256, ContractError> {
-    if let Some(debt) = OUTSTANDING_DEBT.load(deps.storage)? {
+    if let Some(debt) = OUTSTANDING_DEBT.may_load(deps.storage)?.flatten() {
         return Ok(debt.amount);
     }
 
