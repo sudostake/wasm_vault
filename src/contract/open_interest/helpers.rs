@@ -247,23 +247,11 @@ pub(crate) fn get_outstanding_amount(
     state: &LiquidationState,
     deps: &DepsMut,
 ) -> Result<Uint256, ContractError> {
-    let outstanding_debt = OUTSTANDING_DEBT.may_load(deps.storage)?.flatten();
-    match outstanding_debt {
-        Some(debt) => {
-            if debt.denom != state.denom {
-                return Err(ContractError::Std(StdError::msg(format!(
-                    "Outstanding debt denom mismatch: expected {}, got {}",
-                    state.denom, debt.denom
-                ))));
-            }
-            let debt_amount = debt.amount;
-            Ok(debt_amount)
-        }
-        None => {
-            let collateral_amount = state.open_interest.collateral.amount;
-            Ok(collateral_amount)
-        }
+    if let Some(debt) = OUTSTANDING_DEBT.may_load(deps.storage)?.flatten() {
+        return Ok(debt.amount);
     }
+
+    Ok(state.open_interest.collateral.amount)
 }
 
 pub(crate) fn collect_funds(
