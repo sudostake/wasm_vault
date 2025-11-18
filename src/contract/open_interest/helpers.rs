@@ -219,7 +219,8 @@ pub(crate) fn load_liquidation_state(
         .ok_or(ContractError::NoOpenInterest {})?;
 
     let lender = LENDER
-        .load(deps.storage)?
+        .may_load(deps.storage)?
+        .flatten()
         .ok_or(ContractError::NoLender {})?;
 
     let expiry = OPEN_INTEREST_EXPIRY
