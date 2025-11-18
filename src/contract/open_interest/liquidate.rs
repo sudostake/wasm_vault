@@ -47,8 +47,8 @@ pub fn liquidate(
 
     let settled_remaining = remaining_after_payout
         .checked_sub(undelegated_amount)
-        .map_err(|_| ContractError::Std(StdError::msg("settled remaining underflow")))?;
-    finalize_state(&state, &mut deps, Uint256::from(settled_remaining))?;
+        .expect("settled remaining underflow");
+    finalize_state(&state, &mut deps, settled_remaining)?;
 
     let mut attrs = open_interest_attributes("liquidate_open_interest", &state.open_interest);
     attrs.push(attr("lender", state.lender.as_str()));

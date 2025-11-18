@@ -375,7 +375,7 @@ pub(crate) fn schedule_undelegations(
 pub(crate) fn finalize_state(
     state: &LiquidationState,
     deps: &mut DepsMut,
-    remaining: Uint256,
+    remaining: Uint128,
 ) -> Result<(), ContractError> {
     if remaining.is_zero() {
         OUTSTANDING_DEBT.save(deps.storage, &None)?;
@@ -384,13 +384,7 @@ pub(crate) fn finalize_state(
         return Ok(());
     }
 
-    let outstanding_coin = Coin::new(
-        Uint128::try_from(remaining).map_err(|_| ContractError::RepaymentAmountOverflow {
-            denom: state.collateral_denom.clone(),
-            requested: remaining,
-        })?,
-        state.collateral_denom.clone(),
-    );
+    let outstanding_coin = Coin::new(Uint256::from(remaining), state.collateral_denom.clone());
     OUTSTANDING_DEBT.save(deps.storage, &Some(outstanding_coin))?;
     Ok(())
 }
