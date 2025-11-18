@@ -7,7 +7,7 @@ use std::convert::TryFrom;
 
 use crate::{
     helpers::{
-        minimum_collateral_lock_for_denom, query_staking_rewards_for_denom, require_owner_or_lender,
+        minimum_collateral_lock_for_denom, query_staking_rewards, require_owner_or_lender,
     },
     state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OPEN_INTEREST_EXPIRY, OUTSTANDING_DEBT},
     types::OpenInterest,
@@ -274,9 +274,8 @@ pub(crate) fn collect_funds(
             .querier
             .query_all_delegations(state.contract_addr.clone())?;
 
-        let reward_amount =
-            query_staking_rewards_for_denom(deps, env, &state.collateral_denom)?;
-        if !reward_amount.is_zero() {
+        let claimable_rewards = query_staking_rewards(deps, env)?;
+        if !claimable_rewards.is_zero() {
             for delegation in delegations {
                 reward_claim_messages.push(CosmosMsg::Distribution(
                     DistributionMsg::WithdrawDelegatorReward {
@@ -284,12 +283,12 @@ pub(crate) fn collect_funds(
                     },
                 ));
             }
-            rewards_claimed = reward_amount;
+            rewards_claimed = claimable_rewards;
         }
 
-        total_available = total_available.checked_add(reward_amount).map_err(|_| {
-            ContractError::Std(StdError::msg("liquidation total available overflow"))
-        })?;
+        total_available = total_available
+            .checked_add(rewards_claimed)
+            .expect("liquidation total available overflow");
     }
 
     Ok(CollectedFunds {
