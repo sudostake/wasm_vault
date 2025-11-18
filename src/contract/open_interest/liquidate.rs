@@ -1,4 +1,4 @@
-use cosmwasm_std::{attr, DepsMut, Env, MessageInfo, Response, StdError, Uint128, Uint256};
+use cosmwasm_std::{attr, DepsMut, Env, MessageInfo, Response};
 
 use crate::ContractError;
 
@@ -52,22 +52,13 @@ pub fn liquidate(
 
     let mut attrs = open_interest_attributes("liquidate_open_interest", &state.open_interest);
     attrs.push(attr("lender", state.lender.as_str()));
-    push_nonzero_attr(&mut attrs, "payout_amount", Uint256::from(payout_amount));
-    push_nonzero_attr(
-        &mut attrs,
-        "rewards_claimed",
-        Uint256::from(rewards_claimed),
-    );
-    push_nonzero_attr(
-        &mut attrs,
-        "undelegated_amount",
-        Uint256::from(undelegated_amount),
-    );
-    push_nonzero_attr(
-        &mut attrs,
-        "outstanding_debt",
-        Uint256::from(settled_remaining),
-    );
+    attrs.push(attr("liquidator", info.sender.as_str()));
+    push_nonzero_attr(&mut attrs, "requested_amount", remaining);
+    push_nonzero_attr(&mut attrs, "available_balance", available);
+    push_nonzero_attr(&mut attrs, "payout_amount", payout_amount);
+    push_nonzero_attr(&mut attrs, "rewards_claimed", rewards_claimed);
+    push_nonzero_attr(&mut attrs, "undelegated_amount", undelegated_amount);
+    push_nonzero_attr(&mut attrs, "outstanding_debt", settled_remaining);
 
     let mut response = Response::new().add_attributes(attrs);
     for msg in messages {
@@ -90,7 +81,7 @@ mod tests {
     use cosmwasm_std::{
         attr, coins,
         testing::{message_info, mock_dependencies, mock_env},
-        BankMsg, Coin, CosmosMsg, Timestamp, Uint256,
+        BankMsg, Coin, CosmosMsg, Timestamp, Uint128,
     };
 
     fn new_open_interest(collateral: &str) -> crate::types::OpenInterest {
@@ -218,7 +209,7 @@ mod tests {
         setup_active_open_interest(deps.as_mut().storage, &owner, &lender, &open_interest);
 
         let amount_u128 = 20u128;
-        let amount = Uint256::from(amount_u128);
+        let amount = Uint128::from(amount_u128);
         OUTSTANDING_DEBT
             .save(
                 deps.as_mut().storage,

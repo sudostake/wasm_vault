@@ -12,6 +12,7 @@ use crate::{
     ContractError,
 };
 
+// TODO refator all references to this.
 fn uint256_to_uint128(value: Uint256) -> Uint128 {
     Uint128::try_from(value).expect("value must fit into Uint128")
 }
@@ -251,18 +252,26 @@ pub(crate) fn get_outstanding_amount(
     deps: &DepsMut,
 ) -> Result<Uint128, ContractError> {
     if let Some(debt) = OUTSTANDING_DEBT.may_load(deps.storage)?.flatten() {
-        return Ok(debt.amount);
+        return convert_amount(debt.amount, &state.collateral_denom);
     }
 
-    Ok(state.open_interest.collateral.amount)
+    convert_amount(state.open_interest.collateral.amount, &state.collateral_denom)
+}
+
+fn convert_amount(amount: Uint256, denom: &str) -> Result<Uint128, ContractError> {
+    Uint128::try_from(amount).map_err(|_| ContractError::LiquidationAmountOverflow {
+        denom: denom.to_string(),
+        requested: amount,
+    })
 }
 
 pub(crate) fn collect_funds(
     state: &LiquidationState,
     deps: &Deps,
     env: &Env,
-    remaining: Uint256,
+    remaining: Uint128,
 ) -> Result<CollectedFunds, ContractError> {
+    let remaining = Uint256::from(remaining);
     let balance = deps
         .querier
         .query_balance(state.contract_addr.clone(), state.collateral_denom.clone())?
@@ -393,7 +402,12 @@ pub(crate) fn finalize_state(
     Ok(())
 }
 
-pub(crate) fn push_nonzero_attr(attrs: &mut Vec<Attribute>, key: &'static str, value: Uint256) {
+pub(crate) fn push_nonzero_attr<V>(attrs: &mut Vec<Attribute>, key: &'static str, value: V)
+where
+    V: Into<Uint256>,
+{
+    let value = value.into();
+
     if value.is_zero() {
         return;
     }
