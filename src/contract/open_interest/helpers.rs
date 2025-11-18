@@ -12,7 +12,7 @@ use crate::{
     ContractError,
 };
 
-// TODO refator all references to this.
+// TODO refactor all references to this.
 fn uint256_to_uint128(value: Uint256) -> Uint128 {
     Uint128::try_from(value).expect("value must fit into Uint128")
 }
@@ -400,7 +400,7 @@ pub(crate) fn finalize_state(
         return Ok(());
     }
 
-    let outstanding_coin = Coin::new(Uint256::from(remaining), state.collateral_denom.clone());
+    let outstanding_coin = Coin::new(remaining, state.collateral_denom.clone());
     OUTSTANDING_DEBT.save(deps.storage, &Some(outstanding_coin))?;
     Ok(())
 }
