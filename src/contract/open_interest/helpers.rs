@@ -337,7 +337,7 @@ pub(crate) fn schedule_undelegations(
 
     let mut messages = Vec::new();
     let mut remaining_to_undelegate = Uint256::from(remaining);
-    let mut undelegated = Uint256::zero();
+    let mut total_undelegated = Uint256::zero();
 
     for delegation in delegations {
         if remaining_to_undelegate.is_zero() {
@@ -350,33 +350,26 @@ pub(crate) fn schedule_undelegations(
         }
 
         let amount = stake_amount.min(remaining_to_undelegate);
+        if amount.is_zero() {
+            continue;
+        }
 
-        let coin_amount =
-            Uint128::try_from(amount).map_err(|_| ContractError::UndelegationAmountOverflow {
-                denom: state.collateral_denom.clone(),
-                requested: amount,
-            })?;
+        let coin_amount = Uint128::try_from(amount)
+            .expect("undelegation amount cannot exceed remaining undelegation target");
 
         messages.push(CosmosMsg::Staking(StakingMsg::Undelegate {
             validator: delegation.validator.clone(),
             amount: Coin::new(coin_amount.u128(), state.collateral_denom.clone()),
         }));
 
-        remaining_to_undelegate = remaining_to_undelegate
-            .checked_sub(amount)
-            .map_err(|_| ContractError::Std(StdError::msg("liquidation undelegate overflow")))?;
-        undelegated = undelegated.checked_add(amount).map_err(|_| {
-            ContractError::Std(StdError::msg("liquidation undelegated amount overflow"))
-        })?;
+        remaining_to_undelegate -= amount;
+        total_undelegated += amount;
     }
 
-    let undelegated_u128 =
-        Uint128::try_from(undelegated).map_err(|_| ContractError::UndelegationAmountOverflow {
-            denom: state.collateral_denom.clone(),
-            requested: undelegated,
-        })?;
+    let total_undelegated_u128 = Uint128::try_from(total_undelegated)
+        .expect("total undelegated amount cannot exceed remaining undelegation target");
 
-    Ok((messages, undelegated_u128))
+    Ok((messages, total_undelegated_u128))
 }
 
 pub(crate) fn finalize_state(
