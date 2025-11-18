@@ -77,6 +77,9 @@ pub enum ContractError {
     #[error("Expiry duration must be greater than zero seconds")]
     InvalidExpiryDuration {},
 
+    #[error("Liquidation unbonding duration cannot exceed {max} seconds")]
+    LiquidationUnbondingDurationTooLong { max: u64 },
+
     #[error("Counter offer terms must match the active open interest")]
     CounterOfferTermsMismatch {},
 
