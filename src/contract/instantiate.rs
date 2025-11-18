@@ -8,7 +8,8 @@ use crate::error::ContractError;
 use crate::msg::InstantiateMsg;
 use crate::state::{
     DEFAULT_LIQUIDATION_UNBONDING_SECONDS, LAST_LIQUIDATION_UNBONDING,
-    LIQUIDATION_UNBONDING_DURATION, OPEN_INTEREST, OUTSTANDING_DEBT, OWNER,
+    LIQUIDATION_UNBONDING_DURATION, MAX_LIQUIDATION_UNBONDING_SECONDS, OPEN_INTEREST,
+    OUTSTANDING_DEBT, OWNER,
 };
 
 // version info for migration info
@@ -32,9 +33,17 @@ pub fn instantiate(
     OUTSTANDING_DEBT.save(deps.storage, &None)?;
     OPEN_INTEREST.save(deps.storage, &None)?;
     clear_active_lender(deps.storage)?;
-    let duration = msg
-        .liquidation_unbonding_duration
-        .unwrap_or(DEFAULT_LIQUIDATION_UNBONDING_SECONDS);
+    let duration = match msg.liquidation_unbonding_duration {
+        Some(duration) => {
+            if duration > MAX_LIQUIDATION_UNBONDING_SECONDS {
+                return Err(ContractError::LiquidationUnbondingDurationTooLong {
+                    max: MAX_LIQUIDATION_UNBONDING_SECONDS,
+                });
+            }
+            duration
+        }
+        None => DEFAULT_LIQUIDATION_UNBONDING_SECONDS,
+    };
     LIQUIDATION_UNBONDING_DURATION.save(deps.storage, &duration)?;
     LAST_LIQUIDATION_UNBONDING.save(deps.storage, &None)?;
 
@@ -48,7 +57,7 @@ mod tests {
     use super::*;
     use crate::state::{
         COUNTER_OFFERS, DEFAULT_LIQUIDATION_UNBONDING_SECONDS, LENDER,
-        LIQUIDATION_UNBONDING_DURATION,
+        LIQUIDATION_UNBONDING_DURATION, MAX_LIQUIDATION_UNBONDING_SECONDS,
     };
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
 
@@ -143,5 +152,29 @@ mod tests {
             .load(deps.as_ref().storage)
             .expect("duration stored");
         assert_eq!(stored_duration, 3_600);
+    }
+
+    #[test]
+    fn instantiate_rejects_excessive_unbonding_duration() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        let sender = deps.api.addr_make("sender");
+
+        let msg = InstantiateMsg {
+            owner: Some(owner.to_string()),
+            liquidation_unbonding_duration: Some(MAX_LIQUIDATION_UNBONDING_SECONDS + 1),
+        };
+        let info = message_info(&sender, &[]);
+
+        let err = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+
+        assert!(
+            matches!(
+                err,
+                ContractError::LiquidationUnbondingDurationTooLong { max }
+                if max == MAX_LIQUIDATION_UNBONDING_SECONDS
+            ),
+            "unexpected error: {err:?}"
+        );
     }
 }

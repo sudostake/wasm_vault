@@ -14,6 +14,8 @@ pub const COUNTER_OFFERS: Map<&Addr, OpenInterest> = Map::new("counter_offers");
 
 /// Safe default for the unstaking delay used in liquidation logic.
 pub const DEFAULT_LIQUIDATION_UNBONDING_SECONDS: u64 = 21 * 24 * 60 * 60;
+/// Hard cap on custom liquidation intervals (30 days in seconds).
+pub const MAX_LIQUIDATION_UNBONDING_SECONDS: u64 = 30 * 24 * 60 * 60;
 
 pub const LIQUIDATION_UNBONDING_DURATION: Item<u64> = Item::new("liquidation_unbonding_duration");
 pub const LAST_LIQUIDATION_UNBONDING: Item<Option<Timestamp>> =
