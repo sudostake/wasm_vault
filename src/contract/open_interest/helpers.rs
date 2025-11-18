@@ -255,7 +255,10 @@ pub(crate) fn get_outstanding_amount(
         return convert_amount(debt.amount, &state.collateral_denom);
     }
 
-    convert_amount(state.open_interest.collateral.amount, &state.collateral_denom)
+    convert_amount(
+        state.open_interest.collateral.amount,
+        &state.collateral_denom,
+    )
 }
 
 fn convert_amount(amount: Uint256, denom: &str) -> Result<Uint128, ContractError> {
