@@ -7,7 +7,10 @@ use std::convert::TryFrom;
 
 use crate::{
     helpers::{minimum_collateral_lock_for_denom, query_staking_rewards, require_owner_or_lender},
-    state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OPEN_INTEREST_EXPIRY, OUTSTANDING_DEBT},
+    state::{
+        COUNTER_OFFERS, DEFAULT_LIQUIDATION_UNBONDING_SECONDS, LAST_LIQUIDATION_UNBONDING, LENDER,
+        LIQUIDATION_UNBONDING_DURATION, OPEN_INTEREST, OPEN_INTEREST_EXPIRY, OUTSTANDING_DEBT,
+    },
     types::OpenInterest,
     ContractError,
 };
@@ -200,6 +203,7 @@ pub fn set_active_lender(
 pub fn clear_active_lender(storage: &mut dyn Storage) -> StdResult<()> {
     LENDER.save(storage, &None)?;
     OPEN_INTEREST_EXPIRY.save(storage, &None)?;
+    LAST_LIQUIDATION_UNBONDING.save(storage, &None)?;
     Ok(())
 }
 
@@ -384,6 +388,29 @@ pub(crate) fn schedule_undelegations(
     Ok((messages, total_undelegated_u128))
 }
 
+pub(crate) fn liquidation_can_schedule_undelegations(deps: &Deps, env: &Env) -> StdResult<bool> {
+    let duration = LIQUIDATION_UNBONDING_DURATION
+        .may_load(deps.storage)?
+        .unwrap_or(DEFAULT_LIQUIDATION_UNBONDING_SECONDS);
+    if duration == 0 {
+        return Ok(true);
+    }
+
+    if let Some(Some(last_time)) = LAST_LIQUIDATION_UNBONDING.may_load(deps.storage)? {
+        let next_allowed = last_time.plus_seconds(duration);
+        if env.block.time < next_allowed {
+            return Ok(false);
+        }
+    }
+
+    Ok(true)
+}
+
+pub(crate) fn record_liquidation_undelegation_time(deps: &mut DepsMut, env: &Env) -> StdResult<()> {
+    LAST_LIQUIDATION_UNBONDING.save(deps.storage, &Some(env.block.time))?;
+    Ok(())
+}
+
 pub(crate) fn finalize_state(
     state: &LiquidationState,
     deps: &mut DepsMut,
@@ -406,12 +433,7 @@ where
     V: Into<Uint256>,
 {
     let value = value.into();
-
-    if value.is_zero() {
-        return;
-    }
-
-    attrs.push(attr(key, value.to_string()));
+    attrs.extend((!value.is_zero()).then(|| attr(key, value.to_string())));
 }
 
 fn repayment_requirements(open_interest: &OpenInterest) -> StdResult<BTreeMap<String, Uint256>> {
@@ -568,5 +590,31 @@ mod tests {
                 && available == Uint128::from(170u128)
                 && requested == Uint128::from(200u128)
         ));
+    }
+
+    #[test]
+    fn deferred_undelegation_respects_unbonding_delay() {
+        let mut deps = mock_dependencies();
+        let env = mock_env();
+
+        LAST_LIQUIDATION_UNBONDING
+            .save(deps.as_mut().storage, &Some(env.block.time))
+            .expect("timestamp stored");
+
+        assert!(
+            !liquidation_can_schedule_undelegations(&deps.as_ref(), &env).expect("allowed"),
+            "cannot undelegate until delay expires"
+        );
+
+        let mut later_env = env.clone();
+        later_env.block.time = later_env
+            .block
+            .time
+            .plus_seconds(DEFAULT_LIQUIDATION_UNBONDING_SECONDS);
+
+        assert!(
+            liquidation_can_schedule_undelegations(&deps.as_ref(), &later_env).expect("allowed"),
+            "undelegation permitted after delay"
+        );
     }
 }

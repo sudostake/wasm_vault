@@ -27,6 +27,7 @@ fn instantiate_vault() -> (BasicApp, Addr, Addr) {
             owner.clone(),
             &InstantiateMsg {
                 owner: Some(owner.to_string()),
+                liquidation_unbonding_duration: None,
             },
             &[],
             "vault",
@@ -454,6 +455,18 @@ fn liquidate_claims_rewards_before_payout() {
     )
     .expect("delegate succeeds");
 
+    app.execute_contract(
+        owner.clone(),
+        contract_addr.clone(),
+        &ExecuteMsg::Withdraw {
+            denom: DENOM.to_string(),
+            amount: collateral_amount,
+            recipient: None,
+        },
+        &[],
+    )
+    .expect("withdraws collateral before liquidation");
+
     app.update_block(|block| {
         block.height += 1_000;
         block.time = block
@@ -494,6 +507,128 @@ fn liquidate_claims_rewards_before_payout() {
         lender_balance_after > lender_balance_before,
         "lender should receive funds during liquidation"
     );
+
+    let info: InfoResponse = app
+        .wrap()
+        .query_wasm_smart(contract_addr.clone(), &QueryMsg::Info)
+        .expect("info query succeeds");
+
+    assert!(info.open_interest.is_none());
+    assert!(info.lender.is_none());
+}
+
+#[test]
+fn liquidate_defers_state_clear_until_funds_arrive() {
+    let (mut app, contract_addr, owner) = instantiate_vault();
+
+    let open_interest = OpenInterest {
+        liquidity_coin: Coin::new(1_000u128, DENOM),
+        interest_coin: Coin::new(25u128, "uinterest"),
+        expiry_duration: 86_400u64,
+        collateral: Coin::new(1_000u128, DENOM),
+    };
+
+    mint_contract_collateral(&mut app, &contract_addr, &open_interest.collateral);
+
+    app.execute_contract(
+        owner.clone(),
+        contract_addr.clone(),
+        &ExecuteMsg::OpenInterest(open_interest.clone()),
+        &[],
+    )
+    .expect("open interest set");
+
+    let lender = app.api().addr_make("lender");
+    let liquidity_amount = Uint128::try_from(open_interest.liquidity_coin.amount)
+        .expect("liquidity amount fits in Uint128");
+    app.send_tokens(
+        owner.clone(),
+        lender.clone(),
+        &coins(liquidity_amount.u128(), DENOM),
+    )
+    .expect("fund lender");
+
+    app.execute_contract(
+        lender.clone(),
+        contract_addr.clone(),
+        &ExecuteMsg::FundOpenInterest(open_interest.clone()),
+        &[open_interest.liquidity_coin.clone()],
+    )
+    .expect("funding succeeds");
+
+    let validators = app
+        .wrap()
+        .query_all_validators()
+        .expect("validator query succeeds");
+    let validator = validators
+        .get(0)
+        .expect("at least one validator")
+        .address
+        .clone();
+
+    let collateral_amount = Uint128::try_from(open_interest.collateral.amount)
+        .expect("collateral amount fits in Uint128");
+    app.execute_contract(
+        owner.clone(),
+        contract_addr.clone(),
+        &ExecuteMsg::Delegate {
+            validator,
+            amount: collateral_amount,
+        },
+        &[],
+    )
+    .expect("delegate succeeds");
+
+    app.execute_contract(
+        owner.clone(),
+        contract_addr.clone(),
+        &ExecuteMsg::Withdraw {
+            denom: DENOM.to_string(),
+            amount: collateral_amount,
+            recipient: None,
+        },
+        &[],
+    )
+    .expect("withdraws collateral before liquidation");
+
+    let contract_balance = app
+        .wrap()
+        .query_balance(contract_addr.clone(), DENOM)
+        .expect("balance query");
+    assert!(contract_balance.amount.is_zero());
+
+    app.update_block(|block| {
+        block.height += 1_000;
+        block.time = block
+            .time
+            .plus_seconds(open_interest.expiry_duration + 1_000_000);
+    });
+
+    app.execute_contract(
+        owner.clone(),
+        contract_addr.clone(),
+        &ExecuteMsg::LiquidateOpenInterest {},
+        &[],
+    )
+    .expect("first liquidate succeeds");
+
+    let info: InfoResponse = app
+        .wrap()
+        .query_wasm_smart(contract_addr.clone(), &QueryMsg::Info)
+        .expect("info query succeeds");
+
+    assert!(info.open_interest.is_some());
+    assert!(info.lender.is_some());
+
+    mint_contract_collateral(&mut app, &contract_addr, &open_interest.collateral);
+
+    app.execute_contract(
+        owner.clone(),
+        contract_addr.clone(),
+        &ExecuteMsg::LiquidateOpenInterest {},
+        &[],
+    )
+    .expect("second liquidate succeeds");
 
     let info: InfoResponse = app
         .wrap()
