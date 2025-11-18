@@ -1,4 +1,5 @@
-use cosmwasm_std::{attr, BankMsg, Coin, DepsMut, Env, MessageInfo, Response};
+use cosmwasm_std::{attr, BankMsg, Coin, DepsMut, Env, MessageInfo, Response, Uint128};
+use std::convert::TryFrom;
 
 use crate::{
     helpers::require_owner,
@@ -36,8 +37,8 @@ pub fn repay(deps: DepsMut, env: Env, info: MessageInfo) -> Result<Response, Con
         if available_amount < requested_amount {
             return Err(ContractError::InsufficientBalance {
                 denom: denom.clone(),
-                available: available_amount,
-                requested: requested_amount,
+                available: Uint128::try_from(available_amount).expect("balance fits in u128"),
+                requested: Uint128::try_from(requested_amount).expect("request fits in u128"),
             });
         }
 

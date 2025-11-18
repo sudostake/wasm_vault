@@ -43,7 +43,8 @@ pub fn require_owner_or_lender(deps: &DepsMut, info: &MessageInfo) -> Result<Add
     Err(ContractError::Unauthorized {})
 }
 
-pub fn query_staking_rewards_for_denom(deps: &Deps, env: &Env, denom: &str) -> StdResult<Uint256> {
+pub fn query_staking_rewards(deps: &Deps, env: &Env) -> StdResult<Uint256> {
+    // Rewards always payout in the bonded denom, so we sum every reward coin here.
     let response = deps
         .querier
         .query_delegation_total_rewards(env.contract.address.clone())?;
@@ -51,7 +52,6 @@ pub fn query_staking_rewards_for_denom(deps: &Deps, env: &Env, denom: &str) -> S
     response
         .total
         .into_iter()
-        .filter(|coin| coin.denom == denom)
         .try_fold(Uint256::zero(), |acc, coin| {
             acc.checked_add(coin.amount.to_uint_floor())
                 .map_err(StdError::from)
@@ -92,7 +92,7 @@ pub fn minimum_collateral_lock_for_denom(
         return Ok(interest.collateral.amount);
     };
 
-    let rewards = query_staking_rewards_for_denom(deps, env, denom)?;
+    let rewards = query_staking_rewards(deps, env)?;
     let staked = query_staked_balance(deps, env, denom)?;
     let coverage = rewards.checked_add(staked).map_err(StdError::from)?;
 

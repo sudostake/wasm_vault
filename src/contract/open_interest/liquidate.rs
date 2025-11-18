@@ -1,4 +1,4 @@
-use cosmwasm_std::{attr, DepsMut, Env, MessageInfo, Response, StdError};
+use cosmwasm_std::{attr, DepsMut, Env, MessageInfo, Response};
 
 use crate::ContractError;
 
@@ -23,19 +23,18 @@ pub fn liquidate(
         reward_claim_messages,
     } = collect_funds(&state, &deps.as_ref(), &env, remaining)?;
     messages.extend(reward_claim_messages);
-
     let payout_amount = available.min(remaining);
+
     if !payout_amount.is_zero() {
         messages.push(payout_message(&state, payout_amount)?);
     }
-
     let remaining_after_payout = remaining
         .checked_sub(payout_amount)
-        .map_err(|_| ContractError::Std(StdError::msg("liquidation remaining overflow")))?;
+        .expect("liquidation remaining underflow");
 
-    if !remaining_after_payout.is_zero() && state.denom != state.bonded_denom {
+    if !remaining_after_payout.is_zero() && state.collateral_denom != state.bonded_denom {
         return Err(ContractError::InsufficientBalance {
-            denom: state.denom.clone(),
+            denom: state.collateral_denom.clone(),
             available,
             requested: remaining,
         });
@@ -47,11 +46,14 @@ pub fn liquidate(
 
     let settled_remaining = remaining_after_payout
         .checked_sub(undelegated_amount)
-        .map_err(|_| ContractError::Std(StdError::msg("settled remaining underflow")))?;
+        .expect("settled remaining underflow");
     finalize_state(&state, &mut deps, settled_remaining)?;
 
     let mut attrs = open_interest_attributes("liquidate_open_interest", &state.open_interest);
     attrs.push(attr("lender", state.lender.as_str()));
+    attrs.push(attr("liquidator", info.sender.as_str()));
+    push_nonzero_attr(&mut attrs, "requested_amount", remaining);
+    push_nonzero_attr(&mut attrs, "available_balance", available);
     push_nonzero_attr(&mut attrs, "payout_amount", payout_amount);
     push_nonzero_attr(&mut attrs, "rewards_claimed", rewards_claimed);
     push_nonzero_attr(&mut attrs, "undelegated_amount", undelegated_amount);
@@ -78,7 +80,7 @@ mod tests {
     use cosmwasm_std::{
         attr, coins,
         testing::{message_info, mock_dependencies, mock_env},
-        BankMsg, Coin, CosmosMsg, Timestamp, Uint256,
+        BankMsg, Coin, CosmosMsg, Timestamp, Uint128,
     };
 
     fn new_open_interest(collateral: &str) -> crate::types::OpenInterest {
@@ -146,7 +148,7 @@ mod tests {
             .update_balance(env.contract.address.as_str(), coins(25, collateral_denom));
 
         let amount_u128 = 25u128;
-        let amount = Uint256::from(amount_u128);
+        let amount = Uint128::from(amount_u128);
         OUTSTANDING_DEBT
             .save(
                 deps.as_mut().storage,
@@ -206,7 +208,7 @@ mod tests {
         setup_active_open_interest(deps.as_mut().storage, &owner, &lender, &open_interest);
 
         let amount_u128 = 20u128;
-        let amount = Uint256::from(amount_u128);
+        let amount = Uint128::from(amount_u128);
         OUTSTANDING_DEBT
             .save(
                 deps.as_mut().storage,

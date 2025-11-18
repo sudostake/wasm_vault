@@ -8,6 +8,7 @@ use crate::{
     ContractError,
 };
 use std::cmp::max;
+use std::convert::TryFrom;
 
 pub fn execute(
     deps: DepsMut,
@@ -31,8 +32,8 @@ pub fn execute(
     if withdrawable < requested {
         return Err(ContractError::InsufficientBalance {
             denom: denom.clone(),
-            available: withdrawable,
-            requested,
+            available: Uint128::try_from(withdrawable).expect("available fits in u128"),
+            requested: Uint128::try_from(requested).expect("requested fits in u128"),
         });
     }
 
@@ -151,8 +152,8 @@ mod tests {
                 available,
                 requested,
             } if denom == "ucosm"
-                && available == Uint256::zero()
-                && requested == Uint256::from(10u128)
+                && available == Uint128::zero()
+                && requested == Uint128::from(10u128)
         ));
     }
 
@@ -357,8 +358,8 @@ mod tests {
                 available,
                 requested,
             } if denom == collateral_denom
-                && available == Uint256::zero()
-                && requested == Uint256::from(10u128)
+                && available == Uint128::zero()
+                && requested == Uint128::from(10u128)
         ));
     }
 
@@ -415,8 +416,8 @@ mod tests {
                 available,
                 requested,
             } if denom == bonded_denom
-                && available == Uint256::from(50u128)
-                && requested == Uint256::from(100u128)
+                && available == Uint128::from(50u128)
+                && requested == Uint128::from(100u128)
         ));
     }
 
