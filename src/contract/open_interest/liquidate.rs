@@ -23,7 +23,6 @@ pub fn liquidate(
         reward_claim_messages,
     } = collect_funds(&state, &deps.as_ref(), &env, remaining)?;
     messages.extend(reward_claim_messages);
-
     let payout_amount = available.min(remaining);
 
     if !payout_amount.is_zero() {
