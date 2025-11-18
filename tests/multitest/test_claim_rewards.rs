@@ -17,6 +17,7 @@ fn owner_can_claim_rewards_from_all_validators() {
             owner.clone(),
             &InstantiateMsg {
                 owner: Some(owner.to_string()),
+                liquidation_unbonding_duration: None,
             },
             &[],
             "vault",
@@ -112,6 +113,7 @@ fn non_owner_cannot_claim_rewards() {
             owner.clone(),
             &InstantiateMsg {
                 owner: Some(owner.to_string()),
+                liquidation_unbonding_duration: None,
             },
             &[],
             "vault",

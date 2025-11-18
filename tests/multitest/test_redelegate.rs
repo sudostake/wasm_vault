@@ -17,6 +17,7 @@ fn owner_can_redelegate_between_validators() {
             owner.clone(),
             &InstantiateMsg {
                 owner: Some(owner.to_string()),
+                liquidation_unbonding_duration: None,
             },
             &[],
             "vault",
@@ -105,6 +106,7 @@ fn non_owner_cannot_redelegate() {
             owner.clone(),
             &InstantiateMsg {
                 owner: Some(owner.to_string()),
+                liquidation_unbonding_duration: None,
             },
             &[],
             "vault",

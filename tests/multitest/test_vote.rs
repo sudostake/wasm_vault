@@ -16,6 +16,7 @@ fn owner_can_cast_standard_vote_when_gov_accepts() {
             owner.clone(),
             &InstantiateMsg {
                 owner: Some(owner.to_string()),
+                liquidation_unbonding_duration: None,
             },
             &[],
             "vault",
@@ -56,6 +57,7 @@ fn owner_can_cast_weighted_vote_when_gov_accepts() {
             owner.clone(),
             &InstantiateMsg {
                 owner: Some(owner.to_string()),
+                liquidation_unbonding_duration: None,
             },
             &[],
             "vault",
@@ -105,6 +107,7 @@ fn vote_fails_when_gov_module_rejects() {
             owner.clone(),
             &InstantiateMsg {
                 owner: Some(owner.to_string()),
+                liquidation_unbonding_duration: None,
             },
             &[],
             "vault",
@@ -142,6 +145,7 @@ fn non_owner_cannot_vote_even_when_gov_accepts() {
             owner.clone(),
             &InstantiateMsg {
                 owner: Some(owner.to_string()),
+                liquidation_unbonding_duration: None,
             },
             &[],
             "vault",

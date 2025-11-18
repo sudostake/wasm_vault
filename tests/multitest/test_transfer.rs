@@ -21,6 +21,7 @@ fn owner_can_transfer_ownership() {
             owner.clone(),
             &InstantiateMsg {
                 owner: Some(owner.to_string()),
+                liquidation_unbonding_duration: None,
             },
             &[],
             "vault",
@@ -60,6 +61,7 @@ fn non_owner_cannot_transfer_ownership() {
             owner.clone(),
             &InstantiateMsg {
                 owner: Some(owner.to_string()),
+                liquidation_unbonding_duration: None,
             },
             &[],
             "vault",

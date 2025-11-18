@@ -1,11 +1,11 @@
-use cosmwasm_std::{attr, DepsMut, Env, MessageInfo, Response};
+use cosmwasm_std::{attr, DepsMut, Env, MessageInfo, Response, Uint128};
 
 use crate::ContractError;
 
 use super::helpers::{
-    collect_funds, finalize_state, get_outstanding_amount, load_liquidation_state,
-    open_interest_attributes, payout_message, push_nonzero_attr, schedule_undelegations,
-    CollectedFunds,
+    collect_funds, finalize_state, get_outstanding_amount, liquidation_can_schedule_undelegations,
+    load_liquidation_state, open_interest_attributes, payout_message, push_nonzero_attr,
+    record_liquidation_undelegation_time, schedule_undelegations, CollectedFunds,
 };
 
 pub fn liquidate(
@@ -40,8 +40,17 @@ pub fn liquidate(
         });
     }
 
-    let (undelegate_msgs, undelegated_amount) =
-        schedule_undelegations(&state, &deps.as_ref(), remaining_after_payout)?;
+    let mut undelegate_msgs = Vec::new();
+    let mut undelegated_amount = Uint128::zero();
+    if liquidation_can_schedule_undelegations(&deps.as_ref(), &env)? {
+        let (msgs, amount) =
+            schedule_undelegations(&state, &deps.as_ref(), remaining_after_payout)?;
+        undelegate_msgs = msgs;
+        undelegated_amount = amount;
+        if !undelegated_amount.is_zero() {
+            record_liquidation_undelegation_time(&mut deps, &env)?;
+        }
+    }
     messages.extend(undelegate_msgs);
 
     finalize_state(&state, &mut deps, remaining_after_payout)?;

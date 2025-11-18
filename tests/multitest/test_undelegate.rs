@@ -17,6 +17,7 @@ fn owner_can_undelegate_staked_funds() {
             owner.clone(),
             &InstantiateMsg {
                 owner: Some(owner.to_string()),
+                liquidation_unbonding_duration: None,
             },
             &[],
             "vault",
@@ -102,6 +103,7 @@ fn non_owner_cannot_undelegate() {
             owner.clone(),
             &InstantiateMsg {
                 owner: Some(owner.to_string()),
+                liquidation_unbonding_duration: None,
             },
             &[],
             "vault",
@@ -136,6 +138,7 @@ fn undelegate_zero_amount_fails() {
             owner.clone(),
             &InstantiateMsg {
                 owner: Some(owner.to_string()),
+                liquidation_unbonding_duration: None,
             },
             &[],
             "vault",
@@ -172,6 +175,7 @@ fn undelegate_more_than_delegated_fails() {
             owner.clone(),
             &InstantiateMsg {
                 owner: Some(owner.to_string()),
+                liquidation_unbonding_duration: None,
             },
             &[],
             "vault",

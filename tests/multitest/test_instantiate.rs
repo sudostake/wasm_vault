@@ -17,6 +17,7 @@ fn instantiate_respects_explicit_owner() {
 
     let instantiate_msg = InstantiateMsg {
         owner: Some(explicit_owner.to_string()),
+        liquidation_unbonding_duration: None,
     };
 
     let response = app
@@ -64,7 +65,10 @@ fn instantiate_defaults_to_sender() {
 
     let sender = app.api().addr_make("user");
 
-    let instantiate_msg = InstantiateMsg { owner: None };
+    let instantiate_msg = InstantiateMsg {
+        owner: None,
+        liquidation_unbonding_duration: None,
+    };
 
     let response = app
         .execute(

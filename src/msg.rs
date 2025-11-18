@@ -6,6 +6,7 @@ use cosmwasm_std::{Uint128, VoteOption, WeightedVoteOption};
 #[cw_serde]
 pub struct InstantiateMsg {
     pub owner: Option<String>,
+    pub liquidation_unbonding_duration: Option<u64>,
 }
 
 #[cw_serde]

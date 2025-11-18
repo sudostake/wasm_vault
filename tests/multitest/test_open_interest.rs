@@ -27,6 +27,7 @@ fn instantiate_vault() -> (BasicApp, Addr, Addr) {
             owner.clone(),
             &InstantiateMsg {
                 owner: Some(owner.to_string()),
+                liquidation_unbonding_duration: None,
             },
             &[],
             "vault",

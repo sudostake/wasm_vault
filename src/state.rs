@@ -12,6 +12,13 @@ pub const OPEN_INTEREST: Item<Option<OpenInterest>> = Item::new("open_interest")
 pub const OPEN_INTEREST_EXPIRY: Item<Option<Timestamp>> = Item::new("open_interest_expiry");
 pub const COUNTER_OFFERS: Map<&Addr, OpenInterest> = Map::new("counter_offers");
 
+/// Safe default for the unstaking delay used in liquidation logic.
+pub const DEFAULT_LIQUIDATION_UNBONDING_SECONDS: u64 = 21 * 24 * 60 * 60;
+
+pub const LIQUIDATION_UNBONDING_DURATION: Item<u64> = Item::new("liquidation_unbonding_duration");
+pub const LAST_LIQUIDATION_UNBONDING: Item<Option<Timestamp>> =
+    Item::new("last_liquidation_unbonding");
+
 #[cfg(test)]
 mod tests {
     use super::*;
