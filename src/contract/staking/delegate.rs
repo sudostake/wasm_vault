@@ -74,7 +74,7 @@ mod tests {
         types::OpenInterest,
     };
     use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
-    use cosmwasm_std::{coins, Addr, Coin, Decimal, Storage, Uint128, Uint256, Validator};
+    use cosmwasm_std::{coins, Addr, Coin, Decimal, Storage, Uint128, Validator};
 
     fn setup_owner_and_zero_debt(storage: &mut dyn Storage, owner: &Addr) {
         OWNER.save(storage, owner).expect("owner stored");
