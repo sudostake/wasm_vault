@@ -179,7 +179,7 @@ pub(crate) fn refund_counter_offer_escrow(storage: &mut dyn Storage) -> StdResul
 pub(crate) struct LiquidationState {
     pub(crate) open_interest: OpenInterest,
     pub(crate) lender: Addr,
-    pub(crate) denom: String,
+    pub(crate) collateral_denom: String,
     pub(crate) contract_addr: Addr,
     pub(crate) bonded_denom: String,
 }
@@ -230,14 +230,14 @@ pub(crate) fn load_liquidation_state(
         return Err(ContractError::OpenInterestNotExpired {});
     }
 
-    let denom = open_interest.collateral.denom.clone();
+    let collateral_denom = open_interest.collateral.denom.clone();
     let contract_addr = env.contract.address.clone();
     let bonded_denom = deps.querier.query_bonded_denom()?;
 
     Ok(LiquidationState {
         open_interest,
         lender,
-        denom,
+        collateral_denom,
         contract_addr,
         bonded_denom,
     })
@@ -262,18 +262,19 @@ pub(crate) fn collect_funds(
 ) -> Result<CollectedFunds, ContractError> {
     let balance = deps
         .querier
-        .query_balance(state.contract_addr.clone(), state.denom.clone())?
+        .query_balance(state.contract_addr.clone(), state.collateral_denom.clone())?
         .amount;
     let mut total_available = balance;
     let mut reward_claim_messages = Vec::new();
     let mut rewards_claimed = Uint256::zero();
 
-    if state.denom == state.bonded_denom && total_available < remaining {
+    if state.collateral_denom == state.bonded_denom && total_available < remaining {
         let delegations = deps
             .querier
             .query_all_delegations(state.contract_addr.clone())?;
 
-        let reward_amount = query_staking_rewards_for_denom(deps, env, &state.denom)?;
+        let reward_amount =
+            query_staking_rewards_for_denom(deps, env, &state.collateral_denom)?;
         if !reward_amount.is_zero() {
             for delegation in delegations {
                 reward_claim_messages.push(CosmosMsg::Distribution(
@@ -303,13 +304,13 @@ pub(crate) fn payout_message(
 ) -> Result<CosmosMsg, ContractError> {
     let payout_value =
         Uint128::try_from(payout_amount).map_err(|_| ContractError::LiquidationAmountOverflow {
-            denom: state.denom.clone(),
+            denom: state.collateral_denom.clone(),
             requested: payout_amount,
         })?;
 
     Ok(CosmosMsg::Bank(BankMsg::Send {
         to_address: state.lender.to_string(),
-        amount: vec![Coin::new(payout_value.u128(), state.denom.clone())],
+        amount: vec![Coin::new(payout_value.u128(), state.collateral_denom.clone())],
     }))
 }
 
@@ -344,13 +345,13 @@ pub(crate) fn schedule_undelegations(
 
         let coin_amount =
             Uint128::try_from(amount).map_err(|_| ContractError::UndelegationAmountOverflow {
-                denom: state.denom.clone(),
+                denom: state.collateral_denom.clone(),
                 requested: amount,
             })?;
 
         messages.push(CosmosMsg::Staking(StakingMsg::Undelegate {
             validator: delegation.validator.clone(),
-            amount: Coin::new(coin_amount.u128(), state.denom.clone()),
+            amount: Coin::new(coin_amount.u128(), state.collateral_denom.clone()),
         }));
 
         remaining_to_undelegate = remaining_to_undelegate
@@ -378,10 +379,10 @@ pub(crate) fn finalize_state(
 
     let outstanding_coin = Coin::new(
         Uint128::try_from(remaining).map_err(|_| ContractError::RepaymentAmountOverflow {
-            denom: state.denom.clone(),
+            denom: state.collateral_denom.clone(),
             requested: remaining,
         })?,
-        state.denom.clone(),
+        state.collateral_denom.clone(),
     );
     OUTSTANDING_DEBT.save(deps.storage, &Some(outstanding_coin))?;
     Ok(())
