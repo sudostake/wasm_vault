@@ -44,10 +44,7 @@ pub fn liquidate(
         schedule_undelegations(&state, &deps.as_ref(), remaining_after_payout)?;
     messages.extend(undelegate_msgs);
 
-    let settled_remaining = remaining_after_payout
-        .checked_sub(undelegated_amount)
-        .expect("settled remaining underflow");
-    finalize_state(&state, &mut deps, settled_remaining)?;
+    finalize_state(&state, &mut deps, remaining_after_payout)?;
 
     let mut attrs = open_interest_attributes("liquidate_open_interest", &state.open_interest);
     attrs.push(attr("lender", state.lender.as_str()));
@@ -57,7 +54,7 @@ pub fn liquidate(
     push_nonzero_attr(&mut attrs, "payout_amount", payout_amount);
     push_nonzero_attr(&mut attrs, "rewards_claimed", rewards_claimed);
     push_nonzero_attr(&mut attrs, "undelegated_amount", undelegated_amount);
-    push_nonzero_attr(&mut attrs, "outstanding_debt", settled_remaining);
+    push_nonzero_attr(&mut attrs, "outstanding_debt", remaining_after_payout);
 
     let mut response = Response::new().add_attributes(attrs);
     for msg in messages {
@@ -80,7 +77,7 @@ mod tests {
     use cosmwasm_std::{
         attr, coins,
         testing::{message_info, mock_dependencies, mock_env},
-        BankMsg, Coin, CosmosMsg, Timestamp, Uint128,
+        BankMsg, Coin, CosmosMsg, Decimal, FullDelegation, Timestamp, Uint128, Validator,
     };
 
     fn new_open_interest(collateral: &str) -> crate::types::OpenInterest {
@@ -228,5 +225,69 @@ mod tests {
                 && available.is_zero()
                 && requested == amount
         ));
+    }
+
+    #[test]
+    fn liquidate_preserves_state_during_pending_undelegation() {
+        let mut deps = mock_dependencies();
+        let owner = deps.api.addr_make("owner");
+        let lender = deps.api.addr_make("lender");
+        let collateral_denom = "uatom";
+        let open_interest = new_open_interest(collateral_denom);
+        setup_active_open_interest(deps.as_mut().storage, &owner, &lender, &open_interest);
+
+        let remaining_amount = 100u128;
+        OUTSTANDING_DEBT
+            .save(
+                deps.as_mut().storage,
+                &Some(Coin::new(remaining_amount, collateral_denom.to_string())),
+            )
+            .expect("debt stored");
+
+        let env = mock_env();
+        let validator_addr = deps.api.addr_make("validator");
+        let validator = validator_addr.to_string();
+
+        deps.querier.staking.update(
+            collateral_denom.to_string(),
+            &[Validator::create(
+                validator.clone(),
+                Decimal::zero(),
+                Decimal::zero(),
+                Decimal::zero(),
+            )],
+            &[FullDelegation::create(
+                env.contract.address.clone(),
+                validator,
+                Coin::new(remaining_amount, collateral_denom.to_string()),
+                Coin::new(remaining_amount, collateral_denom.to_string()),
+                vec![],
+            )],
+        );
+
+        let response =
+            liquidate(deps.as_mut(), env.clone(), message_info(&owner, &[])).expect("liquidate");
+
+        assert!(response.attributes.iter().any(|attr| {
+            attr.key == "undelegated_amount" && attr.value == remaining_amount.to_string()
+        }));
+        assert!(response.attributes.iter().any(|attr| {
+            attr.key == "outstanding_debt" && attr.value == remaining_amount.to_string()
+        }));
+
+        assert_eq!(
+            OUTSTANDING_DEBT
+                .load(deps.as_ref().storage)
+                .expect("outstanding debt persisted"),
+            Some(Coin::new(remaining_amount, collateral_denom.to_string()))
+        );
+        assert!(OPEN_INTEREST
+            .load(deps.as_ref().storage)
+            .expect("open interest still stored")
+            .is_some());
+        assert!(LENDER
+            .load(deps.as_ref().storage)
+            .expect("lender still stored")
+            .is_some());
     }
 }

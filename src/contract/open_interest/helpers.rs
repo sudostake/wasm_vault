@@ -406,12 +406,11 @@ where
     V: Into<Uint256>,
 {
     let value = value.into();
-
-    if value.is_zero() {
-        return;
-    }
-
-    attrs.push(attr(key, value.to_string()));
+    attrs.extend(
+        (!value.is_zero())
+            .then(|| attr(key, value.to_string()))
+            .into_iter(),
+    );
 }
 
 fn repayment_requirements(open_interest: &OpenInterest) -> StdResult<BTreeMap<String, Uint256>> {
