@@ -6,9 +6,7 @@ use std::collections::{btree_map::Entry, BTreeMap};
 use std::convert::TryFrom;
 
 use crate::{
-    helpers::{
-        minimum_collateral_lock_for_denom, query_staking_rewards, require_owner_or_lender,
-    },
+    helpers::{minimum_collateral_lock_for_denom, query_staking_rewards, require_owner_or_lender},
     state::{COUNTER_OFFERS, LENDER, OPEN_INTEREST, OPEN_INTEREST_EXPIRY, OUTSTANDING_DEBT},
     types::OpenInterest,
     ContractError,
@@ -201,8 +199,8 @@ pub fn clear_active_lender(storage: &mut dyn Storage) -> StdResult<()> {
 }
 
 pub(crate) struct CollectedFunds {
-    pub(crate) available: Uint256,
-    pub(crate) rewards_claimed: Uint256,
+    pub(crate) available: Uint128,
+    pub(crate) rewards_claimed: Uint128,
     pub(crate) reward_claim_messages: Vec<CosmosMsg>,
 }
 
@@ -247,7 +245,7 @@ pub(crate) fn load_liquidation_state(
 pub(crate) fn get_outstanding_amount(
     state: &LiquidationState,
     deps: &DepsMut,
-) -> Result<Uint256, ContractError> {
+) -> Result<Uint128, ContractError> {
     if let Some(debt) = OUTSTANDING_DEBT.may_load(deps.storage)?.flatten() {
         return Ok(debt.amount);
     }
@@ -291,8 +289,21 @@ pub(crate) fn collect_funds(
             .expect("liquidation total available overflow");
     }
 
+    let available = Uint128::try_from(total_available).map_err(|_| {
+        ContractError::LiquidationAmountOverflow {
+            denom: state.collateral_denom.clone(),
+            requested: total_available,
+        }
+    })?;
+    let rewards_claimed = Uint128::try_from(rewards_claimed).map_err(|_| {
+        ContractError::LiquidationAmountOverflow {
+            denom: state.collateral_denom.clone(),
+            requested: rewards_claimed,
+        }
+    })?;
+
     Ok(CollectedFunds {
-        available: total_available,
+        available,
         rewards_claimed,
         reward_claim_messages,
     })
@@ -300,17 +311,14 @@ pub(crate) fn collect_funds(
 
 pub(crate) fn payout_message(
     state: &LiquidationState,
-    payout_amount: Uint256,
+    payout_amount: Uint128,
 ) -> Result<CosmosMsg, ContractError> {
-    let payout_value =
-        Uint128::try_from(payout_amount).map_err(|_| ContractError::LiquidationAmountOverflow {
-            denom: state.collateral_denom.clone(),
-            requested: payout_amount,
-        })?;
-
     Ok(CosmosMsg::Bank(BankMsg::Send {
         to_address: state.lender.to_string(),
-        amount: vec![Coin::new(payout_value.u128(), state.collateral_denom.clone())],
+        amount: vec![Coin::new(
+            payout_amount.u128(),
+            state.collateral_denom.clone(),
+        )],
     }))
 }
 

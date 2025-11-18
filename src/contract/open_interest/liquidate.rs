@@ -1,4 +1,4 @@
-use cosmwasm_std::{attr, DepsMut, Env, MessageInfo, Response, StdError};
+use cosmwasm_std::{attr, DepsMut, Env, MessageInfo, Response, StdError, Uint128, Uint256};
 
 use crate::ContractError;
 
@@ -25,37 +25,60 @@ pub fn liquidate(
     messages.extend(reward_claim_messages);
 
     let payout_amount = available.min(remaining);
+
     if !payout_amount.is_zero() {
         messages.push(payout_message(&state, payout_amount)?);
     }
-
     let remaining_after_payout = remaining
         .checked_sub(payout_amount)
-        .map_err(|_| ContractError::Std(StdError::msg("liquidation remaining overflow")))?;
+        .expect("liquidation remaining underflow");
 
-    if !remaining_after_payout.is_zero() && state.denom != state.bonded_denom {
+    if !remaining_after_payout.is_zero() && state.collateral_denom != state.bonded_denom {
         return Err(ContractError::InsufficientBalance {
-            denom: state.denom.clone(),
-            available,
-            requested: remaining,
+            denom: state.collateral_denom.clone(),
+            available: Uint256::from(available),
+            requested: Uint256::from(remaining),
         });
     }
 
-    let (undelegate_msgs, undelegated_amount) =
-        schedule_undelegations(&state, &deps.as_ref(), remaining_after_payout)?;
+    let (undelegate_msgs, undelegated_amount) = schedule_undelegations(
+        &state,
+        &deps.as_ref(),
+        Uint256::from(remaining_after_payout),
+    )?;
     messages.extend(undelegate_msgs);
 
+    let undelegated_amount_u128 = Uint128::try_from(undelegated_amount).map_err(|_| {
+        ContractError::UndelegationAmountOverflow {
+            denom: state.collateral_denom.clone(),
+            requested: undelegated_amount,
+        }
+    })?;
+
     let settled_remaining = remaining_after_payout
-        .checked_sub(undelegated_amount)
+        .checked_sub(undelegated_amount_u128)
         .map_err(|_| ContractError::Std(StdError::msg("settled remaining underflow")))?;
-    finalize_state(&state, &mut deps, settled_remaining)?;
+    let settled_remaining_uint256 = Uint256::from(settled_remaining);
+    finalize_state(&state, &mut deps, settled_remaining_uint256)?;
 
     let mut attrs = open_interest_attributes("liquidate_open_interest", &state.open_interest);
     attrs.push(attr("lender", state.lender.as_str()));
-    push_nonzero_attr(&mut attrs, "payout_amount", payout_amount);
-    push_nonzero_attr(&mut attrs, "rewards_claimed", rewards_claimed);
-    push_nonzero_attr(&mut attrs, "undelegated_amount", undelegated_amount);
-    push_nonzero_attr(&mut attrs, "outstanding_debt", settled_remaining);
+    push_nonzero_attr(&mut attrs, "payout_amount", Uint256::from(payout_amount));
+    push_nonzero_attr(
+        &mut attrs,
+        "rewards_claimed",
+        Uint256::from(rewards_claimed),
+    );
+    push_nonzero_attr(
+        &mut attrs,
+        "undelegated_amount",
+        Uint256::from(undelegated_amount_u128),
+    );
+    push_nonzero_attr(
+        &mut attrs,
+        "outstanding_debt",
+        Uint256::from(settled_remaining),
+    );
 
     let mut response = Response::new().add_attributes(attrs);
     for msg in messages {
