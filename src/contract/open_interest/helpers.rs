@@ -366,10 +366,6 @@ pub(crate) fn schedule_undelegations(
         }
 
         let amount = stake_amount.min(remaining_to_undelegate);
-        if amount.is_zero() {
-            continue;
-        }
-
         let coin_amount = Uint128::try_from(amount)
             .expect("undelegation amount cannot exceed remaining undelegation target");
 
