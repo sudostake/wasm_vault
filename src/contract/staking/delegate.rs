@@ -1,6 +1,7 @@
 use cosmwasm_std::{
     attr, Coin, Deps, DepsMut, Env, MessageInfo, Response, StakingMsg, Uint128, Uint256,
 };
+use std::convert::TryFrom;
 
 use crate::{
     helpers::require_owner,
@@ -35,8 +36,8 @@ pub fn execute(
     if available_after_reserved < requested {
         return Err(ContractError::InsufficientBalance {
             denom: denom.clone(),
-            available: available_after_reserved,
-            requested,
+            available: Uint128::try_from(available_after_reserved).expect("available fits in u128"),
+            requested: Uint128::try_from(requested).expect("requested fits in u128"),
         });
     }
 
@@ -307,8 +308,8 @@ mod tests {
             err,
             ContractError::InsufficientBalance { denom, available, requested }
                 if denom == "ucosm"
-                    && available == Uint256::from(50u128)
-                    && requested == Uint256::from(100u128)
+                    && available == Uint128::from(50u128)
+                    && requested == Uint128::from(100u128)
         ));
     }
 

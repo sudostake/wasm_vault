@@ -1,4 +1,4 @@
-use cosmwasm_std::{Coin, StdError, Uint256};
+use cosmwasm_std::{Coin, StdError, Uint128, Uint256};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -18,8 +18,8 @@ pub enum ContractError {
     #[error("Insufficient balance: have {available} {denom}, need {requested}")]
     InsufficientBalance {
         denom: String,
-        available: Uint256,
-        requested: Uint256,
+        available: Uint128,
+        requested: Uint128,
     },
 
     #[error("Outstanding debt of {amount} must be settled before delegating")]

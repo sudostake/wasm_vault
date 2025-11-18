@@ -36,8 +36,8 @@ pub fn liquidate(
     if !remaining_after_payout.is_zero() && state.collateral_denom != state.bonded_denom {
         return Err(ContractError::InsufficientBalance {
             denom: state.collateral_denom.clone(),
-            available: Uint256::from(available),
-            requested: Uint256::from(remaining),
+            available,
+            requested: remaining,
         });
     }
 
@@ -158,7 +158,7 @@ mod tests {
             .update_balance(env.contract.address.as_str(), coins(25, collateral_denom));
 
         let amount_u128 = 25u128;
-        let amount = Uint256::from(amount_u128);
+        let amount = Uint128::from(amount_u128);
         OUTSTANDING_DEBT
             .save(
                 deps.as_mut().storage,

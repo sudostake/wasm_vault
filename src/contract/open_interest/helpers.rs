@@ -12,6 +12,10 @@ use crate::{
     ContractError,
 };
 
+fn uint256_to_uint128(value: Uint256) -> Uint128 {
+    Uint128::try_from(value).expect("value must fit into Uint128")
+}
+
 pub(crate) fn validate_open_interest(
     deps: &Deps,
     env: &Env,
@@ -72,8 +76,8 @@ fn ensure_collateral_available(
 
     Err(ContractError::InsufficientBalance {
         denom,
-        available: effective_balance,
-        requested,
+        available: uint256_to_uint128(effective_balance),
+        requested: uint256_to_uint128(requested),
     })
 }
 
@@ -489,8 +493,8 @@ mod tests {
                 available,
                 requested,
             } if denom == "uatom"
-                && available == Uint256::from(150u128)
-                && requested == Uint256::from(200u128)
+                && available == Uint128::from(150u128)
+                && requested == Uint128::from(200u128)
         ));
     }
 
@@ -548,8 +552,8 @@ mod tests {
                 available,
                 requested,
             } if denom == "ucosm"
-                && available == Uint256::from(170u128)
-                && requested == Uint256::from(200u128)
+                && available == Uint128::from(170u128)
+                && requested == Uint128::from(200u128)
         ));
     }
 }
