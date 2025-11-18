@@ -325,10 +325,10 @@ pub(crate) fn payout_message(
 pub(crate) fn schedule_undelegations(
     state: &LiquidationState,
     deps: &Deps,
-    remaining: Uint256,
-) -> Result<(Vec<CosmosMsg>, Uint256), ContractError> {
+    remaining: Uint128,
+) -> Result<(Vec<CosmosMsg>, Uint128), ContractError> {
     if remaining.is_zero() {
-        return Ok((Vec::new(), Uint256::zero()));
+        return Ok((Vec::new(), Uint128::zero()));
     }
 
     let delegations = deps
@@ -336,7 +336,7 @@ pub(crate) fn schedule_undelegations(
         .query_all_delegations(state.contract_addr.clone())?;
 
     let mut messages = Vec::new();
-    let mut remaining_to_undelegate = remaining;
+    let mut remaining_to_undelegate = Uint256::from(remaining);
     let mut undelegated = Uint256::zero();
 
     for delegation in delegations {
@@ -370,7 +370,13 @@ pub(crate) fn schedule_undelegations(
         })?;
     }
 
-    Ok((messages, undelegated))
+    let undelegated_u128 =
+        Uint128::try_from(undelegated).map_err(|_| ContractError::UndelegationAmountOverflow {
+            denom: state.collateral_denom.clone(),
+            requested: undelegated,
+        })?;
+
+    Ok((messages, undelegated_u128))
 }
 
 pub(crate) fn finalize_state(

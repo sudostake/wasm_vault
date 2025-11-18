@@ -41,25 +41,14 @@ pub fn liquidate(
         });
     }
 
-    let (undelegate_msgs, undelegated_amount) = schedule_undelegations(
-        &state,
-        &deps.as_ref(),
-        Uint256::from(remaining_after_payout),
-    )?;
+    let (undelegate_msgs, undelegated_amount) =
+        schedule_undelegations(&state, &deps.as_ref(), remaining_after_payout)?;
     messages.extend(undelegate_msgs);
 
-    let undelegated_amount_u128 = Uint128::try_from(undelegated_amount).map_err(|_| {
-        ContractError::UndelegationAmountOverflow {
-            denom: state.collateral_denom.clone(),
-            requested: undelegated_amount,
-        }
-    })?;
-
     let settled_remaining = remaining_after_payout
-        .checked_sub(undelegated_amount_u128)
+        .checked_sub(undelegated_amount)
         .map_err(|_| ContractError::Std(StdError::msg("settled remaining underflow")))?;
-    let settled_remaining_uint256 = Uint256::from(settled_remaining);
-    finalize_state(&state, &mut deps, settled_remaining_uint256)?;
+    finalize_state(&state, &mut deps, Uint256::from(settled_remaining))?;
 
     let mut attrs = open_interest_attributes("liquidate_open_interest", &state.open_interest);
     attrs.push(attr("lender", state.lender.as_str()));
@@ -72,7 +61,7 @@ pub fn liquidate(
     push_nonzero_attr(
         &mut attrs,
         "undelegated_amount",
-        Uint256::from(undelegated_amount_u128),
+        Uint256::from(undelegated_amount),
     );
     push_nonzero_attr(
         &mut attrs,
