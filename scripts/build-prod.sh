@@ -15,6 +15,7 @@ CAPABILITIES="staking,stargate,iterator,cosmwasm_1_1,cosmwasm_1_2,cosmwasm_1_3,c
 OPT_CACHE_VOLUME="$(basename "$(pwd)")_cache"
 REGISTRY_CACHE_VOLUME="registry_cache"
 DOCKER_USER="$(id -u):$(id -g)"
+DOCKER_PLATFORM="${DOCKER_PLATFORM:-linux/amd64}"
 
 echo "== wasm_vault production build =="
 
@@ -45,7 +46,16 @@ mkdir -p "${ARTIFACTS_DIR}"
 docker volume rm "${OPT_CACHE_VOLUME}" >/dev/null 2>&1 || true
 docker volume create "${OPT_CACHE_VOLUME}" >/dev/null
 docker volume create "${REGISTRY_CACHE_VOLUME}" >/dev/null
+# Ensure mounted volumes and artifacts dir are writable by the calling user.
+docker run --rm --platform "${DOCKER_PLATFORM}" \
+  -v "$(pwd)":/code \
+  --mount type=volume,source="${OPT_CACHE_VOLUME}",target=/target \
+  --mount type=volume,source="${REGISTRY_CACHE_VOLUME}",target=/usr/local/cargo/registry \
+  --entrypoint sh \
+  cosmwasm/optimizer:0.16.0 \
+  -c "chown -R ${DOCKER_USER} /target /usr/local/cargo/registry /code/artifacts"
 docker run --rm -v "$(pwd)":/code \
+  --platform "${DOCKER_PLATFORM}" \
   --user "${DOCKER_USER}" \
   --mount type=volume,source="${OPT_CACHE_VOLUME}",target=/target \
   --mount type=volume,source="${REGISTRY_CACHE_VOLUME}",target=/usr/local/cargo/registry \
