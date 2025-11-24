@@ -10,16 +10,17 @@ jobs:
     steps:
       - name: Checkout sources
         uses: actions/checkout@v2
-      - name: Install cargo-run-script
-        uses: actions-rs/cargo@v1
+      - name: Install pinned toolchain
+        uses: actions-rs/toolchain@v1
         with:
-          command: install
-          args: cargo-run-script
-      - name: Run cargo optimize
-        uses: actions-rs/cargo@v1
-        with:
-          command: run-script
-          args: optimize
+          profile: minimal
+          toolchain: 1.86.0
+          target: wasm32-unknown-unknown
+          override: true
+      - name: Run production build script
+        run: ./scripts/build-prod.sh
+        env:
+          RUST_BACKTRACE: 1
       - name: Get release ID
         id: get_release
         uses: bruceadams/get-release@v1.2.3

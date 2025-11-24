@@ -13,11 +13,11 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v2
 
-      - name: Install stable toolchain
+      - name: Install pinned toolchain
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: stable
+          toolchain: 1.86.0
           target: wasm32-unknown-unknown
           override: true
 
@@ -54,11 +54,11 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v2
 
-      - name: Install stable toolchain
+      - name: Install pinned toolchain
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: stable
+          toolchain: 1.86.0
           override: true
           components: rustfmt, clippy
 
@@ -83,3 +83,25 @@ jobs:
       - name: Schema Changes
         # fails if any changes not committed
         run: git diff --exit-code schema
+
+  prod-build:
+    name: Production Build
+    runs-on: ubuntu-latest
+    needs: [test, lints]
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+
+      - name: Install pinned toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: 1.86.0
+          target: wasm32-unknown-unknown
+          components: rustfmt, clippy
+          override: true
+
+      - name: Run production build script
+        run: ./scripts/build-prod.sh
+        env:
+          RUST_BACKTRACE: 1

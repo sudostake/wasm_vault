@@ -9,10 +9,9 @@ Rust smart contract for CosmWasm-based chains. The steps below get you ready to 
   ```sh
   rustup target add wasm32-unknown-unknown --toolchain 1.86.0
   ```
-- [`cargo-run-script`](https://github.com/fornwall/cargo-run-script) (`cargo install cargo-run-script`) — required only for `cargo run-script optimize`.
 - [`cargo-nextest`](https://nexte.st/) (`cargo install cargo-nextest`) for running the test suite with the multi-threaded runner.
 - [`cargo-tarpaulin`](https://github.com/xd009642/tarpaulin) (`cargo install cargo-tarpaulin`) for coverage reports.
-- Docker (optional) if you want to run the optimizer script.
+- Docker (required for the optimizer and production build script).
 - [`cosmwasm-check`](https://github.com/CosmWasm/wasmvm/tree/main/tools/check) for static validation with the same limits the chain enforces.
 
 ## Install & Build Locally
@@ -37,6 +36,16 @@ Rust smart contract for CosmWasm-based chains. The steps below get you ready to 
      target/wasm32-unknown-unknown/release/wasm_vault.wasm
    ```
    The contract requires the `cosmwasm_3_0` capability; adjust the list above to match the target network.
+
+## Production Build
+
+Run the production build script to lint, test, compile, optimize, and checksum the contract:
+
+```sh
+./scripts/build-prod.sh
+```
+
+This script ensures the Wasm target is installed (using the pinned toolchain from `rust-toolchain.toml`), runs `cargo fmt`/`cargo clippy`/`cargo test`, executes the Dockerized optimizer, writes `artifacts/checksums.txt`, and, if available, validates the optimized binary with `cosmwasm-check`.
 
 ## Run Tests
 
@@ -70,6 +79,9 @@ Rust smart contract for CosmWasm-based chains. The steps below get you ready to 
   Artifacts are written to `schema/`.
 - Produce an optimized Wasm binary (requires Docker):
   ```sh
-  cargo run-script optimize
+  docker run --rm -v "$(pwd)":/code \
+    --mount type=volume,source="$(basename "$(pwd)")_cache",target=/target \
+    --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
+    cosmwasm/optimizer:0.16.0
   ```
   The optimized output is placed in `artifacts/`.
