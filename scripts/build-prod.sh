@@ -46,7 +46,11 @@ mkdir -p "${ARTIFACTS_DIR}"
 docker volume rm "${OPT_CACHE_VOLUME}" >/dev/null 2>&1 || true
 docker volume create "${OPT_CACHE_VOLUME}" >/dev/null
 docker volume create "${REGISTRY_CACHE_VOLUME}" >/dev/null
-# Ensure mounted volumes and artifacts dir are writable by the calling user.
+docker run --rm -v "$(pwd)":/code \
+  --platform "${DOCKER_PLATFORM}" \
+  --mount type=volume,source="${OPT_CACHE_VOLUME}",target=/target \
+  --mount type=volume,source="${REGISTRY_CACHE_VOLUME}",target=/usr/local/cargo/registry \
+  cosmwasm/optimizer:0.16.0
 docker run --rm --platform "${DOCKER_PLATFORM}" \
   -v "$(pwd)":/code \
   --mount type=volume,source="${OPT_CACHE_VOLUME}",target=/target \
@@ -54,12 +58,6 @@ docker run --rm --platform "${DOCKER_PLATFORM}" \
   --entrypoint sh \
   cosmwasm/optimizer:0.16.0 \
   -c "chown -R ${DOCKER_USER} /target /usr/local/cargo/registry /code/artifacts"
-docker run --rm -v "$(pwd)":/code \
-  --platform "${DOCKER_PLATFORM}" \
-  --user "${DOCKER_USER}" \
-  --mount type=volume,source="${OPT_CACHE_VOLUME}",target=/target \
-  --mount type=volume,source="${REGISTRY_CACHE_VOLUME}",target=/usr/local/cargo/registry \
-  cosmwasm/optimizer:0.16.0
 
 if [[ ! -f "${OPTIMIZED_WASM}" ]]; then
   echo "Optimized artifact not found at ${OPTIMIZED_WASM}"
