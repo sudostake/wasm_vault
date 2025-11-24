@@ -12,6 +12,8 @@ ARTIFACTS_DIR="${ROOT_DIR}/artifacts"
 OPTIMIZED_WASM="${ARTIFACTS_DIR}/${PACKAGE}.wasm"
 CHECKSUM_FILE="${ARTIFACTS_DIR}/checksums.txt"
 CAPABILITIES="staking,stargate,iterator,cosmwasm_1_1,cosmwasm_1_2,cosmwasm_1_3,cosmwasm_1_4,cosmwasm_2_0,cosmwasm_2_1,cosmwasm_2_2,cosmwasm_3_0,ibc2"
+OPT_CACHE_VOLUME="$(basename "$(pwd)")_cache"
+REGISTRY_CACHE_VOLUME="registry_cache"
 DOCKER_USER="$(id -u):$(id -g)"
 
 echo "== wasm_vault production build =="
@@ -39,10 +41,14 @@ cargo test --locked
 
 echo ">> Optimizing with cosmwasm/optimizer:0.16.0"
 mkdir -p "${ARTIFACTS_DIR}"
+# Reset optimizer cache volume to avoid permission leftovers from prior runs.
+docker volume rm "${OPT_CACHE_VOLUME}" >/dev/null 2>&1 || true
+docker volume create "${OPT_CACHE_VOLUME}" >/dev/null
+docker volume create "${REGISTRY_CACHE_VOLUME}" >/dev/null
 docker run --rm -v "$(pwd)":/code \
   --user "${DOCKER_USER}" \
-  --mount type=volume,source="$(basename "$(pwd)")_cache",target=/target \
-  --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
+  --mount type=volume,source="${OPT_CACHE_VOLUME}",target=/target \
+  --mount type=volume,source="${REGISTRY_CACHE_VOLUME}",target=/usr/local/cargo/registry \
   cosmwasm/optimizer:0.16.0
 
 if [[ ! -f "${OPTIMIZED_WASM}" ]]; then
