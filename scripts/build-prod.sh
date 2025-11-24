@@ -53,7 +53,7 @@ docker run --rm --platform "${DOCKER_PLATFORM}" \
   --mount type=volume,source="${REGISTRY_CACHE_VOLUME}",target=/usr/local/cargo/registry \
   --entrypoint sh \
   cosmwasm/optimizer:0.16.0 \
-  -c "chown -R ${DOCKER_USER} /target /usr/local/cargo/registry /code/artifacts || true"
+  -c "chown -R ${DOCKER_USER} /target /usr/local/cargo/registry /code/artifacts || echo 'Warning: chown failed; optimizer may write root-owned files' >&2"
 docker run --rm -v "$(pwd)":/code \
   --platform "${DOCKER_PLATFORM}" \
   --user "${DOCKER_USER}" \
